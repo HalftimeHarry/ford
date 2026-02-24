@@ -1,0 +1,65 @@
+Name,Seed,Region
+Michigan,1,East
+Duke,1,West
+Arizona,1,South
+UConn,1,Midwest
+Houston,2,East
+Iowa State,2,West
+Illinois,2,South
+Purdue,2,Midwest
+Kansas,3,East
+Nebraska,3,West
+Florida,3,South
+Texas Tech,3,Midwest
+Vanderbilt,4,East
+Michigan State,4,West
+Gonzaga,4,South
+Virginia,4,Midwest
+St. John's,5,East
+Arkansas,5,West
+Louisville,5,South
+Alabama,5,Midwest
+Tennessee,6,East
+North Carolina,6,West
+Saint Louis,6,South
+Kentucky,6,Midwest
+BYU,7,East
+Clemson,7,West
+Villanova,7,South
+Wisconsin,7,Midwest
+Utah State,8,East
+Miami (Fla.),8,West
+NC State,8,South
+Iowa,8,Midwest
+Auburn,9,East
+Indiana,9,West
+UCF,9,South
+Saint Mary's,9,Midwest
+Texas A&M,10,East
+SMU,10,West
+USC,10,South
+Texas,10,Midwest
+UCLA,11,East
+Georgia,11,West
+San Diego State,11,South
+Ohio State,11,Midwest
+Belmont,12,East
+South Florida,12,West
+Liberty,12,South
+Yale,12,Midwest
+Stephen F. Austin,13,East
+High Point,13,West
+UNC Wilmington,13,South
+Hawaii,13,Midwest
+Cal Baptist,14,East
+Austin Peay,14,West
+North Dakota State,14,South
+South Alabama,14,Midwest
+Portland State,15,East
+East Tennessee State,15,West
+Navy,15,South
+Merrimack,15,Midwest
+Wright State,16,East
+UT Martin,16,West
+LIU,16,South
+Bethune-Cookman,16,Midwest
