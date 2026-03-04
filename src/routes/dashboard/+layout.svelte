@@ -9,6 +9,7 @@
 	const navLinks = [
 		{ href: '/dashboard', label: 'Pool' },
 		{ href: '/dashboard/draft', label: 'Live Draft' },
+		{ href: '/leaderboard', label: 'Standings' },
 		{ href: '/dashboard/blog', label: 'Blog' }
 	];
 </script>

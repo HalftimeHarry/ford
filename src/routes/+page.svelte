@@ -6,8 +6,16 @@
 	import { Label } from '$lib/components/ui/label';
 	import * as Card from '$lib/components/ui/card';
 	import { Separator } from '$lib/components/ui/separator';
+	import Users from '@lucide/svelte/icons/users';
+	import Trophy from '@lucide/svelte/icons/trophy';
+	import ChartBar from '@lucide/svelte/icons/chart-bar';
+	import Shuffle from '@lucide/svelte/icons/shuffle';
+	import CircleCheck from '@lucide/svelte/icons/circle-check';
+	import CalendarDays from '@lucide/svelte/icons/calendar-days';
+	import DollarSign from '@lucide/svelte/icons/dollar-sign';
+	import LeaderboardComponent from '$lib/components/Leaderboard.svelte';
 
-	let { form } = $props();
+	let { form, data } = $props();
 
 	let loading = $state(false);
 	let activeTab = $state<'register' | 'login'>('register');
@@ -49,17 +57,34 @@
 				<!-- Pool #2 Entry -->
 				<Card.Card>
 					<Card.CardHeader>
-						<Card.CardTitle class="text-2xl font-bold text-primary">Pool #2 — $1,200</Card.CardTitle>
+						<Card.CardTitle class="flex items-center gap-2 text-2xl font-bold text-primary">
+							<Trophy class="h-5 w-5" /> Ford's Pool — $1,200
+						</Card.CardTitle>
 					</Card.CardHeader>
 					<Card.CardContent>
 						<div class="rounded-lg border-2 border-accent/30 bg-accent/5 p-5 text-center">
-							<p class="mt-2 text-3xl font-extrabold text-accent">$1,200</p>
+							<div class="flex items-center justify-center gap-2">
+								<DollarSign class="h-6 w-6 text-accent" />
+								<p class="text-3xl font-extrabold text-accent">$1,200</p>
+							</div>
 							<p class="text-sm text-muted-foreground">per team + $50 entry fee</p>
 							<Separator class="my-3" />
 							<p class="text-sm font-medium">Pays 1st, 2nd &amp; 3rd Place</p>
-							<p class="mt-1 font-bold text-primary">$7,500 / $3,000 / $1,500</p>
+							<div class="mt-2 overflow-hidden rounded-lg border">
+								{#each [
+									{ place: '🥇 1st Place', amount: '$7,500' },
+									{ place: '🥈 2nd Place', amount: '$3,000' },
+									{ place: '🥉 3rd Place', amount: '$1,500' },
+								] as row, i}
+									<div class="flex items-center justify-between px-4 py-2 text-sm {i % 2 === 0 ? 'bg-card' : 'bg-muted/50'}">
+										<span class="font-medium">{row.place}</span>
+										<span class="font-bold text-primary">{row.amount}</span>
+									</div>
+								{/each}
+							</div>
 						</div>
-						<p class="mt-4 text-sm text-muted-foreground text-center">
+						<p class="mt-4 flex items-center justify-center gap-1.5 text-sm text-muted-foreground">
+							<CalendarDays class="h-4 w-4 shrink-0" />
 							Entry fees due by <strong>Saturday, March 14</strong>. Venmo, Zelle, or pay Mike Garcia at Saddle.
 						</p>
 					</Card.CardContent>
@@ -68,19 +93,29 @@
 				<!-- Entrants -->
 				<Card.Card>
 					<Card.CardHeader>
-						<Card.CardTitle class="text-2xl font-bold text-primary">Entrants</Card.CardTitle>
+						<Card.CardTitle class="flex items-center gap-2 text-2xl font-bold text-primary">
+							<Users class="h-5 w-5" /> Entrants
+						</Card.CardTitle>
 					</Card.CardHeader>
 					<Card.CardContent>
-						<ol class="space-y-2 text-sm">
-							<li class="flex items-center gap-2"><span class="w-5 text-right font-bold text-muted-foreground">1.</span> Doan, JK &amp; Stutts <span class="text-xs text-muted-foreground">(2 teams)</span></li>
-							<li class="flex items-center gap-2"><span class="w-5 text-right font-bold text-muted-foreground">2.</span> Kevin &amp; Lisa Hassett with Dustin</li>
-							<li class="flex items-center gap-2"><span class="w-5 text-right font-bold text-muted-foreground">3.</span> Mike Scott &amp; George</li>
-							<li class="flex items-center gap-2"><span class="w-5 text-right font-bold text-muted-foreground">4.</span> Ryan &amp; friends</li>
-							<li class="flex items-center gap-2"><span class="w-5 text-right font-bold text-muted-foreground">5.</span> Charlie &amp; TBD</li>
-							<li class="flex items-center gap-2"><span class="w-5 text-right font-bold text-muted-foreground">6.</span> Mike Garcia</li>
-							<li class="flex items-center gap-2"><span class="w-5 text-right font-bold text-muted-foreground">7.</span> Matt Weaver</li>
-							<li class="flex items-center gap-2"><span class="w-5 text-right font-bold text-muted-foreground">8.</span> Dan Gaston</li>
-							<li class="flex items-center gap-2"><span class="w-5 text-right font-bold text-muted-foreground">9.</span> Mike T &amp; Ritchie Bartlett</li>
+						<ol class="overflow-hidden rounded-lg border text-sm">
+							{#each [
+								{ n: 1, name: 'Doan, JK & Stutts', note: '2 teams' },
+								{ n: 2, name: 'Kevin & Lisa Hassett with Dustin' },
+								{ n: 3, name: 'Mike Scott & George' },
+								{ n: 4, name: 'Ryan & friends' },
+								{ n: 5, name: 'Charlie & TBD' },
+								{ n: 6, name: 'Mike Garcia' },
+								{ n: 7, name: 'Matt Weaver' },
+								{ n: 8, name: 'Dan Gaston' },
+								{ n: 9, name: 'Mike T & Ritchie Bartlett' },
+							] as entry, i}
+								<li class="flex items-center gap-3 px-4 py-2.5 {i % 2 === 0 ? 'bg-card' : 'bg-muted/50'}">
+									<span class="w-5 text-right font-bold text-muted-foreground">{entry.n}.</span>
+									<span class="flex-1">{entry.name}</span>
+									{#if entry.note}<span class="text-xs text-muted-foreground">{entry.note}</span>{/if}
+								</li>
+							{/each}
 						</ol>
 						<p class="mt-3 text-xs text-muted-foreground">10 entries total · teams TBD at draft</p>
 					</Card.CardContent>
@@ -89,7 +124,9 @@
 				<!-- How It Works -->
 				<Card.Card>
 					<Card.CardHeader>
-						<Card.CardTitle class="text-2xl font-bold text-primary">How It Works</Card.CardTitle>
+						<Card.CardTitle class="flex items-center gap-2 text-2xl font-bold text-primary">
+							<Shuffle class="h-5 w-5" /> How It Works
+						</Card.CardTitle>
 					</Card.CardHeader>
 					<Card.CardContent class="space-y-4 text-foreground/85 leading-relaxed">
 						<p>
@@ -101,22 +138,50 @@
 							Then we select NCAA teams in order. When a team is selected, it is no longer available to others.
 							Be sure to mark out each team selected as we go. A sheet listing teams in each region by seed (1–16) will be provided.
 						</p>
-						<div class="rounded-md bg-muted p-4">
-							<p class="font-semibold text-foreground mb-2">Draft Rounds</p>
-							<ul class="list-disc list-inside space-y-1 text-sm">
-								<li><strong>Rounds 1–2:</strong> Draw order, then reverse for round 2 (pick 10 also gets 11, pick 1 waits until 20th).</li>
-								<li><strong>Rounds 3–4:</strong> New draw, then reverse again.</li>
-								<li><strong>Rounds 5–6:</strong> New draw, then reverse again.</li>
-							</ul>
-							<p class="mt-2 text-sm text-muted-foreground">60 NCAA teams selected total — and we're done.</p>
+						<div class="overflow-hidden rounded-lg border">
+							<div class="bg-primary/5 px-4 py-2.5 font-semibold text-foreground flex items-center gap-2">
+								<Shuffle class="h-4 w-4 text-primary" /> Draft Rounds
+							</div>
+							{#each [
+								{ label: 'Rounds 1–2', desc: 'Draw order, then reverse for round 2 (pick 10 also gets 11, pick 1 waits until 20th).' },
+								{ label: 'Rounds 3–4', desc: 'New draw, then reverse again.' },
+								{ label: 'Rounds 5–6', desc: 'New draw, then reverse again.' },
+							] as row, i}
+								<div class="flex gap-3 px-4 py-2.5 text-sm {i % 2 === 0 ? 'bg-card' : 'bg-muted/50'}">
+									<CircleCheck class="mt-0.5 h-4 w-4 shrink-0 text-accent" />
+									<span><strong>{row.label}:</strong> {row.desc}</span>
+								</div>
+							{/each}
+							<div class="border-t px-4 py-2 text-xs text-muted-foreground bg-muted/30">60 NCAA teams selected total — and we're done.</div>
 						</div>
 					</Card.CardContent>
 				</Card.Card>
 
+				<!-- Live Standings (only shown once any participant has scored) -->
+				{#if (data?.leaderboard ?? []).some(e => e.total > 0)}
+					<Card.Card>
+						<Card.CardHeader>
+							<div class="flex items-center justify-between">
+								<Card.CardTitle class="flex items-center gap-2 text-2xl font-bold text-primary">
+									<Trophy class="h-5 w-5" /> Live Standings
+								</Card.CardTitle>
+								<a href="/leaderboard" class="text-sm font-medium text-primary hover:underline">
+									Full standings ↗
+								</a>
+							</div>
+						</Card.CardHeader>
+						<Card.CardContent>
+							<LeaderboardComponent entries={data.leaderboard} limit={5} compact={true} />
+						</Card.CardContent>
+					</Card.Card>
+				{/if}
+
 				<!-- Scoring -->
 				<Card.Card>
 					<Card.CardHeader>
-						<Card.CardTitle class="text-2xl font-bold text-primary">Scoring</Card.CardTitle>
+						<Card.CardTitle class="flex items-center gap-2 text-2xl font-bold text-primary">
+							<ChartBar class="h-5 w-5" /> Scoring
+						</Card.CardTitle>
 					</Card.CardHeader>
 					<Card.CardContent>
 						<div class="overflow-hidden rounded-lg border">
@@ -124,34 +189,23 @@
 								<thead>
 									<tr class="bg-primary text-primary-foreground">
 										<th class="px-4 py-2.5 text-left font-semibold">Round</th>
-										<th class="px-4 py-2.5 text-left font-semibold">Points</th>
+										<th class="px-4 py-2.5 text-right font-semibold">Points</th>
 									</tr>
 								</thead>
 								<tbody>
-									<tr class="border-b bg-card">
-										<td class="px-4 py-2.5">1st Round</td>
-										<td class="px-4 py-2.5 font-medium">1.5 &times; seed number (1–16)</td>
-									</tr>
-									<tr class="border-b bg-muted/50">
-										<td class="px-4 py-2.5">2nd Round</td>
-										<td class="px-4 py-2.5 font-medium">2.5 &times; seed number (1–16)</td>
-									</tr>
-									<tr class="border-b bg-card">
-										<td class="px-4 py-2.5">3rd Round</td>
-										<td class="px-4 py-2.5 font-medium">3.5 &times; seed number (1–16)</td>
-									</tr>
-									<tr class="border-b bg-muted/50">
-										<td class="px-4 py-2.5">4th Round</td>
-										<td class="px-4 py-2.5 font-medium">4.5 &times; seed number (1–16)</td>
-									</tr>
-									<tr class="border-b bg-card">
-										<td class="px-4 py-2.5">Semi-Final Winners</td>
-										<td class="px-4 py-2.5 font-bold text-accent">25 points</td>
-									</tr>
-									<tr class="bg-primary/10">
-										<td class="px-4 py-2.5 font-semibold">Final Winner</td>
-										<td class="px-4 py-2.5 font-extrabold text-primary">50 points</td>
-									</tr>
+									{#each [
+										{ round: '1st Round', pts: '1.5 × seed', special: false },
+										{ round: '2nd Round', pts: '2.5 × seed', special: false },
+										{ round: '3rd Round (Sweet 16)', pts: '3.5 × seed', special: false },
+										{ round: '4th Round (Elite 8)', pts: '4.5 × seed', special: false },
+										{ round: 'Semi-Final (Final Four)', pts: '25 pts', special: true },
+										{ round: 'Final (Championship)', pts: '50 pts', special: true },
+									] as row, i}
+										<tr class="border-b {row.special ? 'bg-accent/10 font-semibold' : i % 2 === 0 ? 'bg-card' : 'bg-muted/50'}">
+											<td class="px-4 py-2.5">{row.round}</td>
+											<td class="px-4 py-2.5 text-right font-bold {row.special ? 'text-accent' : ''}">{row.pts}</td>
+										</tr>
+									{/each}
 								</tbody>
 							</table>
 						</div>

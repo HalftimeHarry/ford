@@ -1,54 +1,20 @@
 import { fail } from '@sveltejs/kit';
-import { adminPb, ensureAdminAuth } from '$lib/pocketbase';
-import { gameResultSchema, calculateTeamPoints, isTeamAlive } from '$lib/types';
+import { adminPb, ensureAdminAuth, buildLeaderboard } from '$lib/pocketbase';
+import { gameResultSchema, isTeamAlive } from '$lib/types';
 import type { Actions, PageServerLoad } from './$types';
-import type { NcaaTeam, DraftPick, GameResult, User } from '$lib/types';
+import type { NcaaTeam, GameResult } from '$lib/types';
 
 export const load: PageServerLoad = async () => {
 	await ensureAdminAuth();
 	try {
-		const [teams, picks, results, participants] = await Promise.all([
+		const [teams, results, leaderboard] = await Promise.all([
 			adminPb.collection('ncaa_teams').getFullList<NcaaTeam>({ sort: 'region,seed' }),
-			adminPb.collection('draft_picks').getFullList<DraftPick>({
-				sort: 'pick_number',
-				expand: 'user,team'
-			}),
-			adminPb.collection('game_results').getFullList<GameResult>({
-				sort: 'created',
-				expand: 'team'
-			}),
-			adminPb.collection('users').getFullList<User>({ filter: "role = 'participant'", sort: 'name' })
+			adminPb.collection('game_results').getFullList<GameResult>({ expand: 'team' }),
+			buildLeaderboard()
 		]);
-
-		// Scores derived entirely from win rows in game_results
-		const scores: Record<string, { user: User; total: number; breakdown: { round: string; team: string; points: number }[] }> = {};
-
-		for (const p of participants) {
-			scores[p.id] = { user: p, total: 0, breakdown: [] };
-		}
-
-		for (const result of results) {
-			if (!result.won) continue;
-			const team = result.expand?.team;
-			if (!team) continue;
-
-			const pick = picks.find((pk) => pk.team === team.id);
-			if (!pick || !scores[pick.user]) continue;
-
-			const points = calculateTeamPoints(team.seed, result.tournament_round);
-			scores[pick.user].total += points;
-			scores[pick.user].breakdown.push({
-				round: result.tournament_round,
-				team: team.name,
-				points
-			});
-		}
-
-		const leaderboard = Object.values(scores).sort((a, b) => b.total - a.total);
-
-		return { teams, results, leaderboard, picks };
+		return { teams, results, leaderboard };
 	} catch {
-		return { teams: [], results: [], leaderboard: [], picks: [] };
+		return { teams: [], results: [], leaderboard: [] };
 	}
 };
 

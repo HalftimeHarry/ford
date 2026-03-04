@@ -98,7 +98,7 @@ Uniqueness constraints:
 |---------|----------|--------------------------------|
 | author  | relation | -> users; required             |
 | title   | text     | required, max: 200             |
-| body    | editor   | required                       |
+| body    | text     | required                       |
 | image   | file     | max size: 5MB; types: image/*  |
 
 No uniqueness constraints.

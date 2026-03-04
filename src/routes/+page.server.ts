@@ -1,12 +1,19 @@
 import { fail, redirect } from '@sveltejs/kit';
 import { registerSchema, loginSchema } from '$lib/types';
-import { pb, adminPb, ensureAdminAuth } from '$lib/pocketbase';
+import { pb, adminPb, ensureAdminAuth, buildLeaderboard } from '$lib/pocketbase';
 import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ locals }) => {
 	if (locals.user) {
 		const role = locals.user.role || 'participant';
 		redirect(303, role === 'admin' ? '/admin' : '/dashboard');
+	}
+	// Show top-3 preview on the public landing page once scoring has started
+	try {
+		const leaderboard = await buildLeaderboard();
+		return { leaderboard };
+	} catch {
+		return { leaderboard: [] };
 	}
 };
 

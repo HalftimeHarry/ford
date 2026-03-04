@@ -3,8 +3,13 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Label } from '$lib/components/ui/label';
 	import * as Card from '$lib/components/ui/card';
-	import { Separator } from '$lib/components/ui/separator';
 	import { TOURNAMENT_ROUNDS, REGIONS, isTeamAlive } from '$lib/types';
+	import Trophy from '@lucide/svelte/icons/trophy';
+	import ChartBar from '@lucide/svelte/icons/chart-bar';
+	import CircleCheck from '@lucide/svelte/icons/circle-check';
+	import CircleX from '@lucide/svelte/icons/circle-x';
+	import Trash from '@lucide/svelte/icons/trash';
+	import LeaderboardComponent from '$lib/components/Leaderboard.svelte';
 
 	let { data, form } = $props();
 
@@ -28,7 +33,9 @@
 </svelte:head>
 
 <div class="space-y-8">
-	<h1 class="text-3xl font-bold text-primary">Tournament Results & Scoring</h1>
+	<h1 class="flex items-center gap-3 text-3xl font-bold text-primary">
+		<Trophy class="h-7 w-7" /> Tournament Results & Scoring
+	</h1>
 
 	<div class="grid gap-8 lg:grid-cols-3">
 		<!-- Record Result -->
@@ -97,24 +104,30 @@
 			<!-- Recent Results -->
 			<Card.Card>
 				<Card.CardHeader>
-					<Card.CardTitle>Recent Results</Card.CardTitle>
+					<Card.CardTitle class="flex items-center gap-2">
+						<ChartBar class="h-4 w-4" /> Recent Results
+					</Card.CardTitle>
 				</Card.CardHeader>
-				<Card.CardContent class="max-h-[400px] overflow-y-auto">
+				<Card.CardContent class="max-h-[400px] overflow-y-auto p-0">
 					{#if data.results.length === 0}
-						<p class="text-sm text-muted-foreground">No results recorded yet.</p>
+						<p class="p-4 text-sm text-muted-foreground">No results recorded yet.</p>
 					{:else}
-						<div class="space-y-1">
-							{#each [...data.results].reverse() as result}
+						<div class="overflow-hidden rounded-b-lg">
+							{#each [...data.results].reverse() as result, i}
 								{@const team = result.expand?.team}
-								<div class="flex items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-muted">
-									<span class="font-medium {result.won ? 'text-accent' : 'text-destructive'}">
-										{result.won ? 'W' : 'L'}
-									</span>
-									<span>({team?.seed}) {team?.name ?? '?'}</span>
-									<span class="ml-auto text-xs text-muted-foreground">{roundLabels[result.tournament_round]}</span>
+								<div class="flex items-center gap-2 px-3 py-2 text-sm {i % 2 === 0 ? 'bg-card' : 'bg-muted/50'}">
+									{#if result.won}
+										<CircleCheck class="h-4 w-4 shrink-0 text-accent" />
+									{:else}
+										<CircleX class="h-4 w-4 shrink-0 text-destructive" />
+									{/if}
+									<span class="flex-1 truncate">({team?.seed}) {team?.name ?? '?'}</span>
+									<span class="text-xs text-muted-foreground shrink-0">{roundLabels[result.tournament_round]}</span>
 									<form method="POST" action="?/deleteResult" use:enhance>
 										<input type="hidden" name="result_id" value={result.id} />
-										<button type="submit" class="text-xs text-destructive hover:underline">del</button>
+										<button type="submit" class="shrink-0 text-destructive hover:text-destructive/70">
+											<Trash class="h-3.5 w-3.5" />
+										</button>
 									</form>
 								</div>
 							{/each}
@@ -128,53 +141,20 @@
 		<div class="lg:col-span-2">
 			<Card.Card>
 				<Card.CardHeader>
-					<Card.CardTitle>Leaderboard</Card.CardTitle>
+					<div class="flex items-center justify-between">
+						<Card.CardTitle class="flex items-center gap-2">
+							<Trophy class="h-4 w-4" /> Leaderboard
+						</Card.CardTitle>
+						<a href="/leaderboard" target="_blank" class="text-xs text-muted-foreground hover:text-primary underline">
+							Public view ↗
+						</a>
+					</div>
 				</Card.CardHeader>
 				<Card.CardContent>
-					{#if data.leaderboard.length === 0}
-						<p class="text-sm text-muted-foreground">No scores yet.</p>
-					{:else}
-						<div class="overflow-hidden rounded-lg border">
-							<table class="w-full text-sm">
-								<thead>
-									<tr class="bg-primary text-primary-foreground">
-										<th class="px-4 py-2.5 text-left font-semibold w-12">#</th>
-										<th class="px-4 py-2.5 text-left font-semibold">Participant</th>
-										<th class="px-4 py-2.5 text-right font-semibold">Points</th>
-									</tr>
-								</thead>
-								<tbody>
-									{#each data.leaderboard as entry, i}
-										<tr class="border-b {i === 0 ? 'bg-primary/10 font-bold' : i % 2 === 0 ? 'bg-card' : 'bg-muted/50'}">
-											<td class="px-4 py-2.5 text-muted-foreground">{i + 1}</td>
-											<td class="px-4 py-2.5">{entry.user.name}</td>
-											<td class="px-4 py-2.5 text-right font-bold {i === 0 ? 'text-primary' : ''}">{entry.total}</td>
-										</tr>
-									{/each}
-								</tbody>
-							</table>
-						</div>
-
-						<Separator class="my-6" />
-
-						<!-- Score Breakdown -->
-						{#each data.leaderboard as entry}
-							{#if entry.breakdown.length > 0}
-								<div class="mb-4">
-									<p class="mb-2 font-semibold">{entry.user.name} — {entry.total} pts</p>
-									<div class="space-y-0.5 text-sm text-muted-foreground">
-										{#each entry.breakdown as b}
-											<div class="flex gap-2 px-2">
-												<span class="w-24">{roundLabels[b.round]}</span>
-												<span>{b.team}</span>
-												<span class="ml-auto font-medium text-foreground">+{b.points}</span>
-											</div>
-										{/each}
-									</div>
-								</div>
-							{/if}
-						{/each}
-					{/if}
+					<LeaderboardComponent
+						entries={data.leaderboard}
+						showBreakdown={true}
+					/>
 				</Card.CardContent>
 			</Card.Card>
 		</div>

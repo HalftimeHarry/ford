@@ -1,5 +1,5 @@
 import { fail } from '@sveltejs/kit';
-import { adminPb, ensureAdminAuth } from '$lib/pocketbase';
+import { adminPb, ensureAdminAuth, buildLeaderboard } from '$lib/pocketbase';
 import { calculateTeamPoints, isTeamAlive, isPoolDraftReady } from '$lib/types';
 import type { PageServerLoad, Actions } from './$types';
 import type { NcaaTeam, DraftPick, GameResult, User, PoolTeam, JoinRequest, DraftSettings } from '$lib/types';
@@ -41,9 +41,9 @@ export const load: PageServerLoad = async ({ locals }) => {
 	});
 	const myPicks = allPicks.filter((p) => p.user === userId);
 
-	const [results, participants] = await Promise.all([
-		adminPb.collection('game_results').getFullList<GameResult>({ sort: 'created', expand: 'team' }),
-		adminPb.collection('users').getFullList<User>({ filter: "role = 'participant'", sort: 'name' })
+	const [results, leaderboard] = await Promise.all([
+		adminPb.collection('game_results').getFullList<GameResult>({ expand: 'team' }),
+		buildLeaderboard()
 	]);
 
 	const myTeams = myPicks.map((pick) => {
@@ -62,18 +62,6 @@ export const load: PageServerLoad = async ({ locals }) => {
 	});
 
 	const myTotal = myTeams.reduce((sum, t) => sum + t.points, 0);
-
-	const scores: Record<string, { user: User; total: number }> = {};
-	for (const p of participants) scores[p.id] = { user: p, total: 0 };
-	for (const result of results) {
-		if (!result.won) continue;
-		const team = result.expand?.team as NcaaTeam | undefined;
-		if (!team) continue;
-		const pick = allPicks.find((pk) => pk.team === team.id);
-		if (!pick || !scores[pick.user]) continue;
-		scores[pick.user].total += calculateTeamPoints(team.seed, result.tournament_round);
-	}
-	const leaderboard = Object.values(scores).sort((a, b) => b.total - a.total);
 
 	return { poolTeams, allRequests, myRequests, draftReady, myTeams, myTotal, leaderboard };
 };
