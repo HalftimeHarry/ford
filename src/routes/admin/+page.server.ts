@@ -20,7 +20,6 @@ export const load: PageServerLoad = async () => {
 			}),
 			adminPb.collection('pool_teams').getFullList<PoolTeam>({ sort: 'name' }),
 			adminPb.collection('join_requests').getFullList<JoinRequest>({
-				sort: '-created',
 				expand: 'user,pool_team'
 			})
 		]);

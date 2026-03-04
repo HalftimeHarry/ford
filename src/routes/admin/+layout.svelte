@@ -17,6 +17,8 @@
 				<a href="/admin" class="text-sm font-medium text-muted-foreground hover:text-foreground">Draft</a>
 				<a href="/admin/scores" class="text-sm font-medium text-muted-foreground hover:text-foreground">Scores</a>
 				<a href="/dashboard/blog" class="text-sm font-medium text-muted-foreground hover:text-foreground">Blog</a>
+				<a href="/admin/pool" class="text-sm font-medium text-muted-foreground hover:text-foreground">Pool Admin</a>
+				<a href="/leaderboard" class="text-sm font-medium text-muted-foreground hover:text-foreground">Standings</a>
 				<span class="text-sm text-muted-foreground">{data.user.name}</span>
 				<form method="POST" action="/logout">
 					<Button variant="outline" size="sm" type="submit">Logout</Button>

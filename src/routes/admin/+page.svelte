@@ -7,6 +7,17 @@
 	import { Separator } from '$lib/components/ui/separator';
 	import { REGIONS, TIMER_PRESETS, getApprovedParticipants, getPendingRequests, isPoolDraftReady } from '$lib/types';
 	import type { DraftSettings } from '$lib/types';
+	import Users from '@lucide/svelte/icons/users';
+	import UserCheck from '@lucide/svelte/icons/user-check';
+	import UserPlus from '@lucide/svelte/icons/user-plus';
+	import CircleCheck from '@lucide/svelte/icons/circle-check';
+	import CircleX from '@lucide/svelte/icons/circle-x';
+	import Clock from '@lucide/svelte/icons/clock';
+	import Trophy from '@lucide/svelte/icons/trophy';
+	import Shuffle from '@lucide/svelte/icons/shuffle';
+	import ChartBar from '@lucide/svelte/icons/chart-bar';
+	import Hash from '@lucide/svelte/icons/hash';
+	import Zap from '@lucide/svelte/icons/zap';
 
 	let { data, form } = $props();
 
@@ -122,10 +133,10 @@
 	);
 
 	// --- Timer radio state ---
-	let selectedTimer = $state(60);
+	let selectedTimer = $state(600);
 
 	$effect(() => {
-		selectedTimer = settings?.timer_seconds ?? 60;
+		selectedTimer = settings?.timer_seconds ?? 600;
 	});
 
 	let isNotStarted = $derived(settings?.status === 'not_started');
@@ -144,7 +155,9 @@
 		<!-- Team Roster Management -->
 		<Card.Card>
 			<Card.CardHeader>
-				<Card.CardTitle class="text-lg font-bold text-primary">Pool Teams</Card.CardTitle>
+				<Card.CardTitle class="flex items-center gap-2 text-lg font-bold text-primary">
+					<Users class="h-4 w-4" /> Pool Teams
+				</Card.CardTitle>
 				<p class="text-sm text-muted-foreground">
 					{#if isPoolDraftReady(data.poolTeams ?? [], data.joinRequests ?? [])}
 						<span class="font-semibold text-accent">All teams filled — pool is draft-ready.</span>
@@ -155,26 +168,39 @@
 				</p>
 			</Card.CardHeader>
 			<Card.CardContent class="space-y-3">
-				{#each (data.poolTeams ?? []) as team}
-					{@const approved = getApprovedParticipants(team.id, data.joinRequests ?? [])}
-					{@const pending = getPendingRequests(team.id, data.joinRequests ?? [])}
-					<div class="rounded-lg border p-3">
-						<div class="flex items-center justify-between">
-							<p class="font-medium text-sm">{team.name}</p>
-							<span class="text-xs text-muted-foreground">{approved.length}/{team.slot_count} filled</span>
+				<div class="overflow-hidden rounded-lg border">
+					{#each (data.poolTeams ?? []) as team, i}
+						{@const approved = getApprovedParticipants(team.id, data.joinRequests ?? [])}
+						{@const pending = getPendingRequests(team.id, data.joinRequests ?? [])}
+						<div class="flex items-start gap-3 px-3 py-2.5 {i % 2 === 0 ? 'bg-card' : 'bg-muted/50'}">
+							<div class="mt-0.5 shrink-0">
+								{#if approved.length >= team.slot_count}
+									<CircleCheck class="h-4 w-4 text-accent" />
+								{:else if pending.length > 0}
+									<Clock class="h-4 w-4 text-orange-400" />
+								{:else}
+									<CircleX class="h-4 w-4 text-muted-foreground/40" />
+								{/if}
+							</div>
+							<div class="flex-1 min-w-0">
+								<div class="flex items-center justify-between gap-2">
+									<p class="font-medium text-sm truncate">{team.name}</p>
+									<span class="text-xs text-muted-foreground shrink-0">{approved.length}/{team.slot_count}</span>
+								</div>
+								{#if approved.length > 0}
+									<p class="text-xs text-accent mt-0.5 flex items-center gap-1">
+										<UserCheck class="h-3 w-3" />{approved.map((r) => r.expand?.user?.name ?? '?').join(', ')}
+									</p>
+								{/if}
+								{#if pending.length > 0}
+									<p class="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
+										<Clock class="h-3 w-3" />Pending: {pending.map((r) => r.expand?.user?.name ?? '?').join(', ')}
+									</p>
+								{/if}
+							</div>
 						</div>
-						{#if approved.length > 0}
-							<p class="text-xs text-accent mt-1">
-								Approved: {approved.map((r) => r.expand?.user?.name ?? '?').join(', ')}
-							</p>
-						{/if}
-						{#if pending.length > 0}
-							<p class="text-xs text-muted-foreground mt-0.5">
-								Pending: {pending.map((r) => r.expand?.user?.name ?? '?').join(', ')}
-							</p>
-						{/if}
-					</div>
-				{/each}
+					{/each}
+				</div>
 
 				<!-- Add team form -->
 				<Separator class="my-2" />
@@ -206,7 +232,9 @@
 		<!-- Pending Join Requests -->
 		<Card.Card>
 			<Card.CardHeader>
-				<Card.CardTitle class="text-lg font-bold text-primary">Join Requests</Card.CardTitle>
+				<Card.CardTitle class="flex items-center gap-2 text-lg font-bold text-primary">
+					<UserPlus class="h-4 w-4" /> Join Requests
+				</Card.CardTitle>
 				<p class="text-sm text-muted-foreground">
 					{(data.joinRequests ?? []).filter((r) => r.status === 'pending').length} pending
 				</p>
@@ -241,14 +269,16 @@
 				{#if (data.joinRequests ?? []).filter((r) => r.status !== 'pending').length > 0}
 					<Separator class="my-3" />
 					<p class="text-xs font-semibold text-muted-foreground mb-2">Resolved</p>
-					<div class="space-y-1">
-						{#each (data.joinRequests ?? []).filter((r) => r.status !== 'pending') as req}
-							<div class="flex items-center gap-2 text-xs text-muted-foreground">
-								<span class="font-medium {req.status === 'approved' ? 'text-accent' : 'text-destructive'}">
-									{req.status === 'approved' ? '✓' : '✗'}
-								</span>
-								<span>{req.expand?.user?.name ?? req.user}</span>
-								<span>→ {req.expand?.pool_team?.name ?? req.pool_team}</span>
+					<div class="overflow-hidden rounded-lg border">
+						{#each (data.joinRequests ?? []).filter((r) => r.status !== 'pending') as req, i}
+							<div class="flex items-center gap-2 px-3 py-2 text-xs {i % 2 === 0 ? 'bg-card' : 'bg-muted/50'}">
+								{#if req.status === 'approved'}
+									<CircleCheck class="h-3.5 w-3.5 shrink-0 text-accent" />
+								{:else}
+									<CircleX class="h-3.5 w-3.5 shrink-0 text-destructive" />
+								{/if}
+								<span class="font-medium">{req.expand?.user?.name ?? req.user}</span>
+								<span class="text-muted-foreground">→ {req.expand?.pool_team?.name ?? req.pool_team}</span>
 							</div>
 						{/each}
 					</div>
@@ -299,11 +329,14 @@
 		</div>
 	</div>
 
-	<div>
-		<h1 class="text-3xl font-bold text-primary">Draft Board</h1>
-		<p class="text-muted-foreground">
-			{entryCount} entries — Round {currentDraftRound} of 6 — Pick #{nextPickNumber} of {totalPicks}
-		</p>
+	<div class="flex items-center gap-3">
+		<Trophy class="h-7 w-7 text-primary" />
+		<div>
+			<h1 class="text-3xl font-bold text-primary">Draft Board</h1>
+			<p class="text-muted-foreground">
+				{entryCount} entries — Round {currentDraftRound} of 6 — Pick #{nextPickNumber} of {totalPicks}
+			</p>
+		</div>
 	</div>
 
 	{#if draftComplete}
@@ -381,7 +414,7 @@
 											class="h-3.5 w-3.5 accent-primary"
 										/>
 										<span>{preset.label}</span>
-										{#if preset.value === 60}
+										{#if preset.value === 600}
 											<span class="ml-auto text-xs text-muted-foreground">default</span>
 										{/if}
 									</label>
@@ -459,21 +492,23 @@
 			{#if currentGroupOrders.length > 0}
 				<Card.Card>
 					<Card.CardHeader class="pb-2">
-						<Card.CardTitle class="text-sm">Order (Group {currentRoundGroup})</Card.CardTitle>
+						<Card.CardTitle class="flex items-center gap-1.5 text-sm">
+							<Shuffle class="h-3.5 w-3.5" /> Order (Group {currentRoundGroup})
+						</Card.CardTitle>
 					</Card.CardHeader>
 					<Card.CardContent>
-						<ol class="space-y-0.5 text-sm">
-							{#each currentGroupOrders.sort((a, b) => a.position - b.position) as order}
+						<ol class="overflow-hidden rounded-lg border text-sm">
+							{#each currentGroupOrders.sort((a, b) => a.position - b.position) as order, i}
 								{@const user = data.participants.find((p) => p.id === order.user)}
-								<li
-									class="flex items-center gap-2 rounded px-2 py-0.5 {nextPicker?.id === order.user
+								<li class="flex items-center gap-2 px-2 py-1.5
+									{nextPicker?.id === order.user
 										? 'bg-primary/10 font-bold text-primary'
-										: ''}"
-								>
-									<span class="w-5 text-right text-muted-foreground text-xs">{order.position}.</span>
-									<span class="text-xs">{user?.name ?? 'Unknown'}</span>
+										: i % 2 === 0 ? 'bg-card' : 'bg-muted/50'}">
+									<Hash class="h-3 w-3 shrink-0 text-muted-foreground" />
+									<span class="w-4 text-right text-muted-foreground text-xs">{order.position}</span>
+									<span class="flex-1 text-xs">{user?.name ?? 'Unknown'}</span>
 									{#if nextPicker?.id === order.user}
-										<span class="ml-auto text-[10px] text-primary">picking</span>
+										<Zap class="h-3 w-3 text-primary" />
 									{/if}
 								</li>
 							{/each}
@@ -600,25 +635,28 @@
 	<!-- Draft Log (full width, below) -->
 	<Card.Card>
 		<Card.CardHeader class="pb-3">
-			<Card.CardTitle>Draft Log ({data.picks.length}/{totalPicks})</Card.CardTitle>
+			<Card.CardTitle class="flex items-center gap-2">
+				<ChartBar class="h-4 w-4" /> Draft Log ({data.picks.length}/{totalPicks})
+			</Card.CardTitle>
 		</Card.CardHeader>
 		<Card.CardContent>
 			{#if data.picks.length === 0}
 				<p class="text-sm text-muted-foreground">No picks yet.</p>
 			{:else}
-				<div class="grid gap-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-					{#each [...data.picks].reverse() as pick}
+				<div class="overflow-hidden rounded-lg border">
+					{#each [...data.picks].reverse() as pick, i}
 						{@const user = pick.expand?.user}
 						{@const team = pick.expand?.team}
-						<div class="flex items-center gap-2 rounded px-3 py-1.5 text-sm hover:bg-muted">
-							<span class="w-6 text-right font-mono text-muted-foreground">{pick.pick_number}.</span>
-							<span class="font-medium">{user?.name ?? '?'}</span>
+						<div class="flex items-center gap-2 px-3 py-1.5 text-sm {i % 2 === 0 ? 'bg-card' : 'bg-muted/50'}">
+							<Hash class="h-3 w-3 shrink-0 text-muted-foreground" />
+							<span class="w-5 text-right font-mono text-xs text-muted-foreground">{pick.pick_number}</span>
+							<span class="font-medium truncate">{user?.name ?? '?'}</span>
 							<span class="text-muted-foreground">—</span>
-							<span>({team?.seed}) {team?.name ?? '?'}</span>
-							<span class="ml-auto text-xs text-muted-foreground">R{pick.draft_round}</span>
+							<span class="flex-1 truncate">({team?.seed}) {team?.name ?? '?'}</span>
+							<span class="text-xs text-muted-foreground shrink-0">R{pick.draft_round}</span>
 							<form method="POST" action="?/undoPick" use:enhance>
 								<input type="hidden" name="pick_id" value={pick.id} />
-								<button type="submit" class="text-xs text-destructive hover:underline">undo</button>
+								<button type="submit" class="text-xs text-destructive hover:underline shrink-0">undo</button>
 							</form>
 						</div>
 					{/each}

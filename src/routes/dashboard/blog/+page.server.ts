@@ -7,7 +7,6 @@ export const load: PageServerLoad = async () => {
 	await ensureAdminAuth();
 
 	const posts = await adminPb.collection('blog_posts').getFullList<BlogPost>({
-		sort: '-created',
 		expand: 'author'
 	});
 
