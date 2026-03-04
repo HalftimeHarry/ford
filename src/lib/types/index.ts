@@ -32,10 +32,6 @@ export const SEED_MULTIPLIERS: Record<Exclude<TournamentRound, 'semifinal' | 'fi
 
 export const FLAT_POINTS = { semifinal: 25, final: 50 } as const;
 
-// --- Pool Types ---
-export const POOL_TYPES = ['pool1', 'pool2'] as const;
-export type PoolType = (typeof POOL_TYPES)[number];
-
 // --- Draft Config ---
 export const DRAFT_ENTRIES = 10;
 export const TEAMS_PER_ENTRY = 6;
@@ -65,36 +61,8 @@ export interface User {
 	name: string;
 	phone: string;
 	role: Role;
-	pool: PoolType;
 	created: string;
 	updated: string;
-}
-
-export interface Pool {
-	id: string;
-	slug: string;
-	name: string;
-	entry_fee: number;
-	admin_fee: number;
-	payout_1: number;
-	payout_2: number;
-	payout_3: number;
-	created: string;
-	updated: string;
-}
-
-export interface PoolEntry {
-	id: string;
-	user: string; // relation -> users
-	pool: string; // relation -> pools
-	paid: boolean;
-	entry_number: number;
-	created: string;
-	updated: string;
-	expand?: {
-		user?: User;
-		pool?: Pool;
-	};
 }
 
 export interface NcaaTeam {
@@ -147,7 +115,6 @@ export interface GameResult {
 
 export interface DraftSettings {
 	id: string;
-	pool: string; // relation -> pools
 	status: DraftStatus;
 	pick_mode: PickMode; // who makes the pick
 	timer_seconds: number; // seconds per pick (0 = no timer)
@@ -155,8 +122,46 @@ export interface DraftSettings {
 	allow_user_pick: boolean; // can the on-the-clock user submit their own pick
 	created: string;
 	updated: string;
+}
+
+// --- Pool Teams ---
+// A "pool team" is one of the 10 named entries in the pool (e.g. "Doan, JK & Stutts").
+// Participants request to join a team; admin approves.
+
+export const JOIN_REQUEST_STATUSES = ['pending', 'approved', 'rejected'] as const;
+export type JoinRequestStatus = (typeof JOIN_REQUEST_STATUSES)[number];
+
+export interface PoolTeam {
+	id: string;
+	name: string;       // display name, e.g. "Doan, JK & Stutts"
+	slot_count: number; // how many participants this team accepts (1 or 2)
+	created: string;
+	updated: string;
+}
+
+export interface JoinRequest {
+	id: string;
+	user: string;       // relation -> users
+	pool_team: string;  // relation -> pool_teams
+	status: JoinRequestStatus;
+	created: string;
+	updated: string;
 	expand?: {
-		pool?: Pool;
+		user?: User;
+		pool_team?: PoolTeam;
+	};
+}
+
+export interface BlogPost {
+	id: string;
+	author: string; // relation -> users
+	title: string;
+	body: string;
+	image: string; // PocketBase file field — filename string
+	created: string;
+	updated: string;
+	expand?: {
+		author?: User;
 	};
 }
 
@@ -168,8 +173,7 @@ export const registerSchema = z
 		email: z.string().email('Please enter a valid email address'),
 		phone: z.string().optional(),
 		password: z.string().min(8, 'Password must be at least 8 characters'),
-		passwordConfirm: z.string(),
-		pool: z.enum(POOL_TYPES, { message: 'Please select a pool' })
+		passwordConfirm: z.string()
 	})
 	.refine((data) => data.password === data.passwordConfirm, {
 		message: 'Passwords do not match',
@@ -194,13 +198,69 @@ export const gameResultSchema = z.object({
 	won: z.boolean()
 });
 
+export const blogPostSchema = z.object({
+	title: z.string().min(1, 'Title is required').max(200),
+	body: z.string().min(1, 'Body is required')
+});
+
 export const draftSettingsSchema = z.object({
-	pool: z.string().min(1, 'Pool is required'),
 	status: z.enum(DRAFT_STATUSES),
 	pick_mode: z.enum(PICK_MODES),
 	timer_seconds: z.number().min(0).max(600),
 	allow_user_pick: z.boolean()
 });
+
+// --- Pool Readiness Helpers ---
+
+/**
+ * A pool is draft-ready when every team has at least one approved participant
+ * and the total number of teams equals the expected count.
+ */
+export function isPoolDraftReady(
+	teams: PoolTeam[],
+	requests: JoinRequest[],
+	expectedTeamCount = DRAFT_ENTRIES
+): boolean {
+	if (teams.length !== expectedTeamCount) return false;
+	const approvedByTeam = new Map<string, number>();
+	for (const r of requests) {
+		if (r.status === 'approved') {
+			approvedByTeam.set(r.pool_team, (approvedByTeam.get(r.pool_team) ?? 0) + 1);
+		}
+	}
+	return teams.every((t) => (approvedByTeam.get(t.id) ?? 0) >= 1);
+}
+
+/**
+ * Returns the approved participants for a given team id.
+ */
+export function getApprovedParticipants(
+	teamId: string,
+	requests: JoinRequest[]
+): JoinRequest[] {
+	return requests.filter((r) => r.pool_team === teamId && r.status === 'approved');
+}
+
+/**
+ * Returns the pending requests for a given team id.
+ */
+export function getPendingRequests(
+	teamId: string,
+	requests: JoinRequest[]
+): JoinRequest[] {
+	return requests.filter((r) => r.pool_team === teamId && r.status === 'pending');
+}
+
+/**
+ * Returns the join request for a specific user on a specific team, or undefined.
+ */
+export function getUserJoinRequest(
+	userId: string,
+	teamId: string,
+	requests: JoinRequest[]
+): JoinRequest | undefined {
+	return requests.find((r) => r.user === userId && r.pool_team === teamId);
+}
 
 // --- Draft Helpers ---
 

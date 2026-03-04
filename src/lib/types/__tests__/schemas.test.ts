@@ -7,8 +7,7 @@ describe('registerSchema', () => {
 		email: 'john@example.com',
 		phone: '555-1234',
 		password: 'MADcap(123)',
-		passwordConfirm: 'MADcap(123)',
-		pool: 'pool1' as const
+		passwordConfirm: 'MADcap(123)'
 	};
 
 	it('accepts valid registration data', () => {
@@ -52,14 +51,9 @@ describe('registerSchema', () => {
 		}
 	});
 
-	it('rejects invalid pool value', () => {
-		const result = registerSchema.safeParse({ ...valid, pool: 'pool3' });
-		expect(result.success).toBe(false);
-	});
-
-	it('accepts pool1 and pool2', () => {
-		expect(registerSchema.safeParse({ ...valid, pool: 'pool1' }).success).toBe(true);
-		expect(registerSchema.safeParse({ ...valid, pool: 'pool2' }).success).toBe(true);
+	it('accepts valid data without pool field', () => {
+		const result = registerSchema.safeParse(valid);
+		expect(result.success).toBe(true);
 	});
 });
 

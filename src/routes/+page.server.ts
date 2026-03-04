@@ -19,8 +19,7 @@ export const actions: Actions = {
 			email: formData.get('email') as string,
 			phone: formData.get('phone') as string,
 			password: formData.get('password') as string,
-			passwordConfirm: formData.get('passwordConfirm') as string,
-			pool: formData.get('pool') as string
+			passwordConfirm: formData.get('passwordConfirm') as string
 		};
 
 		const result = registerSchema.safeParse(data);
@@ -44,7 +43,6 @@ export const actions: Actions = {
 				password: result.data.password,
 				passwordConfirm: result.data.passwordConfirm,
 				phone: result.data.phone || '',
-				pool: result.data.pool,
 				role: 'participant'
 			});
 

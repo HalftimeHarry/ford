@@ -16,6 +16,7 @@
 			<div class="flex items-center gap-4">
 				<a href="/admin" class="text-sm font-medium text-muted-foreground hover:text-foreground">Draft</a>
 				<a href="/admin/scores" class="text-sm font-medium text-muted-foreground hover:text-foreground">Scores</a>
+				<a href="/dashboard/blog" class="text-sm font-medium text-muted-foreground hover:text-foreground">Blog</a>
 				<span class="text-sm text-muted-foreground">{data.user.name}</span>
 				<form method="POST" action="/logout">
 					<Button variant="outline" size="sm" type="submit">Logout</Button>
