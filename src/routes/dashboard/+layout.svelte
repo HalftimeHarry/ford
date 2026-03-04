@@ -2,8 +2,15 @@
 	import '../../app.css';
 	import fordLogo from '$lib/assets/ford_logo.png';
 	import { Button } from '$lib/components/ui/button';
+	import { page } from '$app/stores';
 
 	let { data, children } = $props();
+
+	const navLinks = [
+		{ href: '/dashboard', label: 'Pool' },
+		{ href: '/dashboard/draft', label: 'Live Draft' },
+		{ href: '/dashboard/blog', label: 'Blog' }
+	];
 </script>
 
 <div class="min-h-screen bg-background">
@@ -13,10 +20,20 @@
 				<img src={fordLogo} alt="Logo" class="h-8 w-8 rounded-full bg-white object-contain p-0.5" />
 				<span class="text-lg font-bold text-primary">NCAA Pool 2026</span>
 			</div>
-			<div class="flex items-center gap-4">
-				<a href="/dashboard" class="text-sm font-medium text-muted-foreground hover:text-foreground">Dashboard</a>
-				<a href="/dashboard/draft" class="text-sm font-medium text-muted-foreground hover:text-foreground">Live Draft</a>
-				<span class="text-sm text-muted-foreground">{data.user.name}</span>
+			<div class="flex items-center gap-1 sm:gap-3">
+				{#each navLinks as link}
+					{@const active = $page.url.pathname === link.href || ($page.url.pathname.startsWith(link.href + '/') && link.href !== '/dashboard')}
+					<a
+						href={link.href}
+						class="rounded-md px-3 py-1.5 text-sm font-medium transition-colors
+							{active
+								? 'bg-primary/10 text-primary'
+								: 'text-muted-foreground hover:text-foreground hover:bg-muted'}"
+					>
+						{link.label}
+					</a>
+				{/each}
+				<span class="hidden sm:block text-sm text-muted-foreground pl-2 border-l ml-1">{data.user.name}</span>
 				<form method="POST" action="/logout">
 					<Button variant="outline" size="sm" type="submit">Logout</Button>
 				</form>

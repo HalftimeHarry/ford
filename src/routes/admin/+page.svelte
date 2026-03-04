@@ -5,49 +5,33 @@
 	import { Label } from '$lib/components/ui/label';
 	import * as Card from '$lib/components/ui/card';
 	import { Separator } from '$lib/components/ui/separator';
-	import { REGIONS, TIMER_PRESETS } from '$lib/types';
-	import type { Pool, DraftSettings } from '$lib/types';
+	import { REGIONS, TIMER_PRESETS, getApprovedParticipants, getPendingRequests, isPoolDraftReady } from '$lib/types';
+	import type { DraftSettings } from '$lib/types';
 
 	let { data, form } = $props();
 
-	// --- Pool tab state ---
-	let defaultPoolId = $derived(data.pools[0]?.id ?? '');
-	let _activePoolId = $state('');
-	let activePoolId = $derived(_activePoolId || defaultPoolId);
+	// Single pool — no tab switching needed
+	let settings = $derived(data.draftSettings as DraftSettings | null);
 
-	let activePool = $derived(data.pools.find((p) => p.id === activePoolId));
-	let settings = $derived(data.allSettings.find((s) => s.pool === activePoolId) ?? null);
-
-	// Filter data by active pool
-	let poolParticipants = $derived(
-		data.poolEntries
-			.filter((e) => e.pool === activePoolId)
-			.map((e) => data.participants.find((p) => p.id === e.user))
-			.filter(Boolean)
-	);
-	let poolParticipantIds = $derived(new Set(poolParticipants.map((p) => p!.id)));
-
-	let poolPicks = $derived(data.picks.filter((p) => poolParticipantIds.has(p.user)));
-	let poolOrders = $derived(data.draftOrders.filter((o) => poolParticipantIds.has(o.user)));
-
-	// --- Derived draft state ---
-	let draftedTeamIds = $derived(new Set(poolPicks.map((p) => p.team)));
-	let availableTeams = $derived(data.teams.filter((t) => !draftedTeamIds.has(t.id)));
-	let nextPickNumber = $derived(poolPicks.length + 1);
-	let entryCount = $derived(poolParticipants.length);
+	// All participants are in the pool
+	let entryCount = $derived(data.participants.length);
 	let totalPicks = $derived(entryCount * 6);
-	let draftComplete = $derived(poolPicks.length >= totalPicks);
+
+	let draftedTeamIds = $derived(new Set(data.picks.map((p) => p.team)));
+	let availableTeams = $derived(data.teams.filter((t) => !draftedTeamIds.has(t.id)));
+	let nextPickNumber = $derived(data.picks.length + 1);
+	let draftComplete = $derived(data.picks.length >= totalPicks);
 
 	let currentDraftRound = $derived(
-		entryCount > 0 ? Math.min(Math.floor(poolPicks.length / entryCount) + 1, 6) : 1
+		entryCount > 0 ? Math.min(Math.floor(data.picks.length / entryCount) + 1, 6) : 1
 	);
 	let currentRoundGroup = $derived(Math.ceil(currentDraftRound / 2));
 
 	let currentGroupOrders = $derived(
-		poolOrders.filter((o) => o.round_group === currentRoundGroup)
+		data.draftOrders.filter((o) => o.round_group === currentRoundGroup)
 	);
 
-	let picksInCurrentRound = $derived(entryCount > 0 ? poolPicks.length % entryCount : 0);
+	let picksInCurrentRound = $derived(entryCount > 0 ? data.picks.length % entryCount : 0);
 	let isReverseRound = $derived(currentDraftRound % 2 === 0);
 
 	let nextPicker = $derived.by(() => {
@@ -153,25 +137,130 @@
 </svelte:head>
 
 <div class="space-y-6">
-	<!-- Pool Tabs + Timer + Status -->
+
+	<!-- Pool Teams & Join Requests -->
+	<div class="grid gap-6 lg:grid-cols-2">
+
+		<!-- Team Roster Management -->
+		<Card.Card>
+			<Card.CardHeader>
+				<Card.CardTitle class="text-lg font-bold text-primary">Pool Teams</Card.CardTitle>
+				<p class="text-sm text-muted-foreground">
+					{#if isPoolDraftReady(data.poolTeams ?? [], data.joinRequests ?? [])}
+						<span class="font-semibold text-accent">All teams filled — pool is draft-ready.</span>
+					{:else}
+						{(data.poolTeams ?? []).filter((t) => getApprovedParticipants(t.id, data.joinRequests ?? []).length > 0).length}
+						/ {(data.poolTeams ?? []).length} teams have an approved participant.
+					{/if}
+				</p>
+			</Card.CardHeader>
+			<Card.CardContent class="space-y-3">
+				{#each (data.poolTeams ?? []) as team}
+					{@const approved = getApprovedParticipants(team.id, data.joinRequests ?? [])}
+					{@const pending = getPendingRequests(team.id, data.joinRequests ?? [])}
+					<div class="rounded-lg border p-3">
+						<div class="flex items-center justify-between">
+							<p class="font-medium text-sm">{team.name}</p>
+							<span class="text-xs text-muted-foreground">{approved.length}/{team.slot_count} filled</span>
+						</div>
+						{#if approved.length > 0}
+							<p class="text-xs text-accent mt-1">
+								Approved: {approved.map((r) => r.expand?.user?.name ?? '?').join(', ')}
+							</p>
+						{/if}
+						{#if pending.length > 0}
+							<p class="text-xs text-muted-foreground mt-0.5">
+								Pending: {pending.map((r) => r.expand?.user?.name ?? '?').join(', ')}
+							</p>
+						{/if}
+					</div>
+				{/each}
+
+				<!-- Add team form -->
+				<Separator class="my-2" />
+				<form method="POST" action="?/createTeam" use:enhance class="space-y-2">
+					<div class="flex gap-2">
+						<input
+							name="name"
+							type="text"
+							placeholder="Team name (e.g. Doan & JK)"
+							required
+							class="flex h-9 flex-1 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+						/>
+						<select
+							name="slot_count"
+							class="flex h-9 rounded-md border border-input bg-transparent px-2 py-1 text-sm shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+						>
+							<option value="1">1 slot</option>
+							<option value="2">2 slots</option>
+						</select>
+						<Button type="submit" size="sm">Add</Button>
+					</div>
+					{#if form?.teamError}
+						<p class="text-xs text-destructive">{form.teamError}</p>
+					{/if}
+				</form>
+			</Card.CardContent>
+		</Card.Card>
+
+		<!-- Pending Join Requests -->
+		<Card.Card>
+			<Card.CardHeader>
+				<Card.CardTitle class="text-lg font-bold text-primary">Join Requests</Card.CardTitle>
+				<p class="text-sm text-muted-foreground">
+					{(data.joinRequests ?? []).filter((r) => r.status === 'pending').length} pending
+				</p>
+			</Card.CardHeader>
+			<Card.CardContent>
+				{#if (data.joinRequests ?? []).filter((r) => r.status === 'pending').length === 0}
+					<p class="text-sm text-muted-foreground py-4 text-center">No pending requests.</p>
+				{:else}
+					<div class="space-y-2">
+						{#each (data.joinRequests ?? []).filter((r) => r.status === 'pending') as req}
+							<div class="flex items-center gap-3 rounded-lg border p-3">
+								<div class="flex-1 min-w-0">
+									<p class="text-sm font-medium truncate">{req.expand?.user?.name ?? req.user}</p>
+									<p class="text-xs text-muted-foreground">→ {req.expand?.pool_team?.name ?? req.pool_team}</p>
+								</div>
+								<div class="flex gap-2 shrink-0">
+									<form method="POST" action="?/approveRequest" use:enhance>
+										<input type="hidden" name="request_id" value={req.id} />
+										<Button type="submit" size="sm" variant="default" class="h-7 px-3 text-xs">Approve</Button>
+									</form>
+									<form method="POST" action="?/rejectRequest" use:enhance>
+										<input type="hidden" name="request_id" value={req.id} />
+										<Button type="submit" size="sm" variant="destructive" class="h-7 px-3 text-xs">Reject</Button>
+									</form>
+								</div>
+							</div>
+						{/each}
+					</div>
+				{/if}
+
+				<!-- Recently resolved -->
+				{#if (data.joinRequests ?? []).filter((r) => r.status !== 'pending').length > 0}
+					<Separator class="my-3" />
+					<p class="text-xs font-semibold text-muted-foreground mb-2">Resolved</p>
+					<div class="space-y-1">
+						{#each (data.joinRequests ?? []).filter((r) => r.status !== 'pending') as req}
+							<div class="flex items-center gap-2 text-xs text-muted-foreground">
+								<span class="font-medium {req.status === 'approved' ? 'text-accent' : 'text-destructive'}">
+									{req.status === 'approved' ? '✓' : '✗'}
+								</span>
+								<span>{req.expand?.user?.name ?? req.user}</span>
+								<span>→ {req.expand?.pool_team?.name ?? req.pool_team}</span>
+							</div>
+						{/each}
+					</div>
+				{/if}
+			</Card.CardContent>
+		</Card.Card>
+	</div>
+
+	<Separator />
+
+	<!-- Draft Status Bar -->
 	<div class="flex items-end gap-6">
-		<div class="flex gap-1 rounded-lg border bg-muted p-1">
-			{#each data.pools as pool}
-				<button
-					class="rounded-md px-4 py-2 text-sm font-medium transition-colors
-						{activePoolId === pool.id
-						? 'bg-background text-primary shadow-sm'
-						: 'text-muted-foreground hover:text-foreground'}"
-					onclick={() => {
-						_activePoolId = pool.id;
-						selectedTeam = '';
-						teamSearch = '';
-					}}
-				>
-					{pool.name}
-				</button>
-			{/each}
-		</div>
 		<div class="flex items-center gap-4 ml-auto">
 			{#if isLive && hasTimer && !draftComplete}
 				<div class="text-center">
@@ -211,9 +300,7 @@
 	</div>
 
 	<div>
-		<h1 class="text-3xl font-bold text-primary">
-			Draft Board — {activePool?.name ?? ''}
-		</h1>
+		<h1 class="text-3xl font-bold text-primary">Draft Board</h1>
 		<p class="text-muted-foreground">
 			{entryCount} entries — Round {currentDraftRound} of 6 — Pick #{nextPickNumber} of {totalPicks}
 		</p>
@@ -239,12 +326,12 @@
 			<div class="flex gap-2">
 				{#if timerExpired}
 					<form method="POST" action="?/autoPick" use:enhance>
-						<input type="hidden" name="pool_id" value={activePoolId} />
+						
 						<Button variant="destructive">Auto-Pick (Time Expired)</Button>
 					</form>
 				{/if}
 				<form method="POST" action="?/autoPick" use:enhance>
-					<input type="hidden" name="pool_id" value={activePoolId} />
+					
 					<Button variant="outline">Auto-Pick Best Available</Button>
 				</form>
 			</div>
@@ -257,7 +344,7 @@
 			<input type="hidden" name="user" value={nextPicker.id} />
 			<input type="hidden" name="draft_round" value={currentDraftRound} />
 			<input type="hidden" name="pick_number" value={nextPickNumber} />
-			<input type="hidden" name="pool_id" value={activePoolId} />
+			
 			<input type="hidden" name="team" value={selectedTeam} />
 		</form>
 	{/if}
@@ -311,13 +398,19 @@
 
 			<!-- Start Draft -->
 			{#if settings && isNotStarted}
+				{@const poolReady = isPoolDraftReady(data.poolTeams ?? [], data.joinRequests ?? [])}
 				<Card.Card class="border-primary/30">
-					<Card.CardContent class="pt-6">
+					<Card.CardContent class="pt-6 space-y-3">
+						{#if !poolReady}
+							<p class="text-xs text-muted-foreground text-center">
+								Draft locked until all 10 teams have an approved participant.
+							</p>
+						{/if}
 						<form method="POST" action="?/startDraft" use:enhance>
-							<input type="hidden" name="pool_id" value={activePoolId} />
+							
 							<input type="hidden" name="settings_id" value={settings.id} />
 							<input type="hidden" name="timer_seconds" value={selectedTimer} />
-							<Button type="submit" class="w-full">Draw Lottery & Start Draft</Button>
+							<Button type="submit" class="w-full" disabled={!poolReady}>Draw Lottery & Start Draft</Button>
 						</form>
 						{#if form?.startError}
 							<p class="mt-2 text-xs text-destructive">{form.startError}</p>
@@ -349,10 +442,10 @@
 					</Card.CardHeader>
 					<Card.CardContent>
 						{#each [2, 3].filter((g) => g > currentRoundGroup) as group}
-							{@const hasOrder = poolOrders.some((o) => o.round_group === group)}
+							{@const hasOrder = data.draftOrders.some((o) => o.round_group === group)}
 							<form method="POST" action="?/generateOrder" use:enhance class="mb-2">
 								<input type="hidden" name="round_group" value={group} />
-								<input type="hidden" name="pool_id" value={activePoolId} />
+								
 								<Button type="submit" variant="outline" class="w-full text-xs" size="sm" disabled={hasOrder}>
 									{hasOrder ? `Group ${group} drawn` : `Draw Group ${group}`}
 								</Button>
@@ -507,14 +600,14 @@
 	<!-- Draft Log (full width, below) -->
 	<Card.Card>
 		<Card.CardHeader class="pb-3">
-			<Card.CardTitle>Draft Log ({poolPicks.length}/{totalPicks})</Card.CardTitle>
+			<Card.CardTitle>Draft Log ({data.picks.length}/{totalPicks})</Card.CardTitle>
 		</Card.CardHeader>
 		<Card.CardContent>
-			{#if poolPicks.length === 0}
+			{#if data.picks.length === 0}
 				<p class="text-sm text-muted-foreground">No picks yet.</p>
 			{:else}
 				<div class="grid gap-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-					{#each [...poolPicks].reverse() as pick}
+					{#each [...data.picks].reverse() as pick}
 						{@const user = pick.expand?.user}
 						{@const team = pick.expand?.team}
 						<div class="flex items-center gap-2 rounded px-3 py-1.5 text-sm hover:bg-muted">
