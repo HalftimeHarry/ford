@@ -37,7 +37,7 @@
 				Power Player's Pool 2026
 			</p>
 			<p class="mt-3 text-lg opacity-80">
-				DRAFT — SATURDAY, MARCH 15, 2026
+				DRAFT — MONDAY, MARCH 16, 2026 · 5:30 PM · CRUST
 			</p>
 		</div>
 	</header>
@@ -46,30 +46,43 @@
 		<div class="grid gap-10 lg:grid-cols-5">
 			<!-- Content Section -->
 			<div class="lg:col-span-3 space-y-8">
-				<!-- Pool Options -->
+				<!-- Pool #2 Entry -->
 				<Card.Card>
 					<Card.CardHeader>
-						<Card.CardTitle class="text-2xl font-bold text-primary">Entry Options</Card.CardTitle>
+						<Card.CardTitle class="text-2xl font-bold text-primary">Pool #2 — $1,200</Card.CardTitle>
 					</Card.CardHeader>
 					<Card.CardContent>
-						<div class="grid gap-6 sm:grid-cols-2">
-							<div class="rounded-lg border-2 border-primary/20 bg-primary/5 p-5 text-center">
-								<p class="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Pool #1</p>
-								<p class="mt-2 text-3xl font-extrabold text-primary">$600</p>
-								<p class="text-sm text-muted-foreground">per team + $50 entry fee</p>
-								<Separator class="my-3" />
-								<p class="text-sm font-medium">Pays 1st, 2nd &amp; 3rd Place</p>
-								<p class="mt-1 font-bold text-accent">$3,800 / $1,600 / $600</p>
-							</div>
-							<div class="rounded-lg border-2 border-accent/30 bg-accent/5 p-5 text-center">
-								<p class="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Pool #2</p>
-								<p class="mt-2 text-3xl font-extrabold text-accent">$1,200</p>
-								<p class="text-sm text-muted-foreground">per team + $50 entry fee</p>
-								<Separator class="my-3" />
-								<p class="text-sm font-medium">Pays 1st, 2nd &amp; 3rd Place</p>
-								<p class="mt-1 font-bold text-primary">$7,500 / $3,000 / $1,500</p>
-							</div>
+						<div class="rounded-lg border-2 border-accent/30 bg-accent/5 p-5 text-center">
+							<p class="mt-2 text-3xl font-extrabold text-accent">$1,200</p>
+							<p class="text-sm text-muted-foreground">per team + $50 entry fee</p>
+							<Separator class="my-3" />
+							<p class="text-sm font-medium">Pays 1st, 2nd &amp; 3rd Place</p>
+							<p class="mt-1 font-bold text-primary">$7,500 / $3,000 / $1,500</p>
 						</div>
+						<p class="mt-4 text-sm text-muted-foreground text-center">
+							Entry fees due by <strong>Saturday, March 14</strong>. Venmo, Zelle, or pay Mike Garcia at Saddle.
+						</p>
+					</Card.CardContent>
+				</Card.Card>
+
+				<!-- Entrants -->
+				<Card.Card>
+					<Card.CardHeader>
+						<Card.CardTitle class="text-2xl font-bold text-primary">Entrants</Card.CardTitle>
+					</Card.CardHeader>
+					<Card.CardContent>
+						<ol class="space-y-2 text-sm">
+							<li class="flex items-center gap-2"><span class="w-5 text-right font-bold text-muted-foreground">1.</span> Doan, JK &amp; Stutts <span class="text-xs text-muted-foreground">(2 teams)</span></li>
+							<li class="flex items-center gap-2"><span class="w-5 text-right font-bold text-muted-foreground">2.</span> Kevin &amp; Lisa Hassett with Dustin</li>
+							<li class="flex items-center gap-2"><span class="w-5 text-right font-bold text-muted-foreground">3.</span> Mike Scott &amp; George</li>
+							<li class="flex items-center gap-2"><span class="w-5 text-right font-bold text-muted-foreground">4.</span> Ryan &amp; friends</li>
+							<li class="flex items-center gap-2"><span class="w-5 text-right font-bold text-muted-foreground">5.</span> Charlie &amp; TBD</li>
+							<li class="flex items-center gap-2"><span class="w-5 text-right font-bold text-muted-foreground">6.</span> Mike Garcia</li>
+							<li class="flex items-center gap-2"><span class="w-5 text-right font-bold text-muted-foreground">7.</span> Matt Weaver</li>
+							<li class="flex items-center gap-2"><span class="w-5 text-right font-bold text-muted-foreground">8.</span> Dan Gaston</li>
+							<li class="flex items-center gap-2"><span class="w-5 text-right font-bold text-muted-foreground">9.</span> Mike T &amp; Ritchie Bartlett</li>
+						</ol>
+						<p class="mt-3 text-xs text-muted-foreground">10 entries total · teams TBD at draft</p>
 					</Card.CardContent>
 				</Card.Card>
 
@@ -257,22 +270,6 @@
 												{/if}
 											</div>
 
-											<div class="space-y-2">
-												<Label for="pool">Pool Selection</Label>
-												<select
-													id="pool"
-													name="pool"
-													class="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-													required
-												>
-													<option value="">Select a pool...</option>
-													<option value="pool1">Pool #1 — $600 + $50</option>
-													<option value="pool2">Pool #2 — $1,200 + $50</option>
-												</select>
-												{#if form?.errors?.pool}
-													<p class="text-sm text-destructive">{form.errors.pool}</p>
-												{/if}
-											</div>
 
 											{#if form?.error}
 												<div class="rounded-md bg-destructive/10 border border-destructive/30 p-3">
@@ -339,7 +336,7 @@
 							{/if}
 						</Card.CardContent>
 						<Card.CardFooter class="justify-center text-xs text-muted-foreground">
-							Draft starts 15 min after Pool #1 draw
+							Draft — Monday, March 16 · 5:30 PM · Crust
 						</Card.CardFooter>
 					</Card.Card>
 				</div>
