@@ -172,7 +172,9 @@
 								</div>
 								<div class="flex-1 min-w-0">
 									<p class="font-medium truncate {entry.eliminated ? 'line-through' : ''}">{entry.team?.name ?? 'Unknown'}</p>
-									<p class="text-xs text-muted-foreground">{entry.team?.region ?? ''} · {entry.wins} win{entry.wins !== 1 ? 's' : ''}</p>
+									<p class="text-xs text-muted-foreground">
+										Round {entry.pick.draft_round}, Pick #{entry.pick.pick_number} · {entry.team?.region ?? ''} · {entry.wins} win{entry.wins !== 1 ? 's' : ''}
+									</p>
 								</div>
 								<div class="text-right shrink-0">
 									<p class="font-bold text-primary">{entry.points}</p>
