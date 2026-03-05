@@ -2,21 +2,20 @@ import { fail } from '@sveltejs/kit';
 import { adminPb, ensureAdminAuth } from '$lib/pocketbase';
 import { draftPickSchema, autoPick } from '$lib/types';
 import type { Actions, PageServerLoad } from './$types';
-import type { NcaaTeam, DraftPick, User, DraftOrder, DraftSettings, PoolTeam, JoinRequest } from '$lib/types';
+import type { NcaaTeam, DraftPick, DraftOrder, DraftSettings, PoolTeam, JoinRequest } from '$lib/types';
 
 export const load: PageServerLoad = async () => {
 	await ensureAdminAuth();
 	try {
-		const [teams, picks, participants, draftOrders, poolTeams, joinRequests] = await Promise.all([
+		const [teams, picks, draftOrders, poolTeams, joinRequests] = await Promise.all([
 			adminPb.collection('ncaa_teams').getFullList<NcaaTeam>({ sort: 'region,seed' }),
 			adminPb.collection('draft_picks').getFullList<DraftPick>({
 				sort: 'pick_number',
 				expand: 'user,team'
 			}),
-			adminPb.collection('users').getFullList<User>({ filter: "role = 'participant'", sort: 'name' }),
 			adminPb.collection('draft_orders').getFullList<DraftOrder>({
 				sort: 'round_group,position',
-				expand: 'user'
+				expand: 'pool_team'
 			}),
 			adminPb.collection('pool_teams').getFullList<PoolTeam>({ sort: 'name' }),
 			adminPb.collection('join_requests').getFullList<JoinRequest>({
@@ -32,20 +31,20 @@ export const load: PageServerLoad = async () => {
 			// no settings yet
 		}
 
-		return { teams, picks, participants, draftOrders, poolTeams, joinRequests, draftSettings };
+		return { teams, picks, draftOrders, poolTeams, joinRequests, draftSettings };
 	} catch (err) {
 		console.error('Admin load error:', err);
 		return {
-			teams: [], picks: [], participants: [], draftOrders: [],
+			teams: [], picks: [], draftOrders: [],
 			poolTeams: [], joinRequests: [], draftSettings: null
 		};
 	}
 };
 
-/** All participant ids */
-async function getAllParticipantIds(): Promise<string[]> {
-	const users = await adminPb.collection('users').getFullList<User>({ filter: "role = 'participant'" });
-	return users.map((u) => u.id);
+/** All pool team ids (one entry per team in the draft) */
+async function getAllPoolTeamIds(): Promise<string[]> {
+	const teams = await adminPb.collection('pool_teams').getFullList<PoolTeam>({ sort: 'name' });
+	return teams.map((t) => t.id);
 }
 
 export const actions: Actions = {
@@ -55,14 +54,23 @@ export const actions: Actions = {
 		const settingsId = formData.get('settings_id') as string;
 		const timerSeconds = Number(formData.get('timer_seconds'));
 
+		// Accept an explicit ordered list of pool_team ids if provided (drag-to-order)
+		const orderedTeamIds = (formData.get('ordered_team_ids') as string | null)
+			?.split(',')
+			.filter(Boolean) ?? [];
+
 		try {
-			const participantIds = await getAllParticipantIds();
-			if (participantIds.length === 0) {
-				return fail(400, { startError: 'No participants registered' });
+			const allTeamIds = await getAllPoolTeamIds();
+			if (allTeamIds.length === 0) {
+				return fail(400, { startError: 'No pool teams found' });
 			}
 
-			// Shuffle for round group 1 lottery
-			const shuffled = [...participantIds].sort(() => Math.random() - 0.5);
+			// Use provided order if valid, otherwise shuffle
+			const teamIds =
+				orderedTeamIds.length === allTeamIds.length &&
+				orderedTeamIds.every((id) => allTeamIds.includes(id))
+					? orderedTeamIds
+					: [...allTeamIds].sort(() => Math.random() - 0.5);
 
 			// Clear existing group 1 orders
 			const existingOrders = await adminPb.collection('draft_orders').getFullList<DraftOrder>({
@@ -72,13 +80,15 @@ export const actions: Actions = {
 				await adminPb.collection('draft_orders').delete(order.id);
 			}
 
-			for (let i = 0; i < shuffled.length; i++) {
-				await adminPb.collection('draft_orders').create({
-					user: shuffled[i],
-					position: i + 1,
-					round_group: 1
-				});
-			}
+			await Promise.all(
+				teamIds.map((teamId, i) =>
+					adminPb.collection('draft_orders').create({
+						pool_team: teamId,
+						position: i + 1,
+						round_group: 1
+					})
+				)
+			);
 
 			const updateData: Record<string, unknown> = {
 				status: 'in_progress',
@@ -149,19 +159,35 @@ export const actions: Actions = {
 	makePick: async ({ request }) => {
 		await ensureAdminAuth();
 		const formData = await request.formData();
-		const data = {
-			user: formData.get('user') as string,
-			team: formData.get('team') as string,
-			draft_round: Number(formData.get('draft_round')),
-			pick_number: Number(formData.get('pick_number'))
-		};
+		const poolTeamId = formData.get('pool_team') as string;
+		const teamId = formData.get('team') as string;
+		const draftRound = Number(formData.get('draft_round'));
+		const pickNumber = Number(formData.get('pick_number'));
 
-		const result = draftPickSchema.safeParse(data);
-		if (!result.success) {
-			return fail(400, { pickError: result.error.issues[0].message });
+		if (!poolTeamId || !teamId || !draftRound || !pickNumber) {
+			return fail(400, { pickError: 'Missing required pick fields' });
 		}
 
 		try {
+			// Resolve a user for this pool team (first approved member)
+			const requests = await adminPb.collection('join_requests').getFullList<JoinRequest>({
+				filter: `pool_team = "${poolTeamId}" && status = "approved"`
+			});
+			if (requests.length === 0) {
+				return fail(400, { pickError: 'No approved user found for this pool team' });
+			}
+			const userId = requests[0].user;
+
+			const result = draftPickSchema.safeParse({
+				user: userId,
+				team: teamId,
+				draft_round: draftRound,
+				pick_number: pickNumber
+			});
+			if (!result.success) {
+				return fail(400, { pickError: result.error.issues[0].message });
+			}
+
 			await adminPb.collection('draft_picks').create(result.data);
 			await advanceDeadline();
 			return { pickSuccess: true };
@@ -171,19 +197,18 @@ export const actions: Actions = {
 		}
 	},
 
-	autoPick: async ({ request }) => {
+	autoPick: async () => {
 		await ensureAdminAuth();
-		const formData = await request.formData();
 
 		try {
-			const [teams, allPicks, allOrders, participantIds] = await Promise.all([
+			const [teams, allPicks, allOrders, allTeamIds] = await Promise.all([
 				adminPb.collection('ncaa_teams').getFullList<NcaaTeam>({ sort: 'region,seed' }),
 				adminPb.collection('draft_picks').getFullList<DraftPick>({ sort: 'pick_number' }),
 				adminPb.collection('draft_orders').getFullList<DraftOrder>({ sort: 'round_group,position' }),
-				getAllParticipantIds()
+				getAllPoolTeamIds()
 			]);
 
-			const entryCount = participantIds.length;
+			const entryCount = allTeamIds.length;
 			const totalPicks = entryCount * 6;
 			if (allPicks.length >= totalPicks) return fail(400, { pickError: 'Draft is complete' });
 
@@ -203,8 +228,14 @@ export const actions: Actions = {
 			const order = groupOrders.find((o) => o.position === positionIndex + 1);
 			if (!order) return fail(400, { pickError: 'No draft order set for this round group' });
 
+			// Resolve a user for this pool team
+			const requests = await adminPb.collection('join_requests').getFullList<JoinRequest>({
+				filter: `pool_team = "${order.pool_team}" && status = "approved"`
+			});
+			if (requests.length === 0) return fail(400, { pickError: 'No approved user for on-clock team' });
+
 			await adminPb.collection('draft_picks').create({
-				user: order.user,
+				user: requests[0].user,
 				team: bestTeam.id,
 				draft_round: draftRound,
 				pick_number: nextPickNumber
@@ -224,8 +255,8 @@ export const actions: Actions = {
 		const roundGroup = Number(formData.get('round_group'));
 
 		try {
-			const participantIds = await getAllParticipantIds();
-			const shuffled = [...participantIds].sort(() => Math.random() - 0.5);
+			const allTeamIds = await getAllPoolTeamIds();
+			const shuffled = [...allTeamIds].sort(() => Math.random() - 0.5);
 
 			const existing = await adminPb.collection('draft_orders').getFullList<DraftOrder>({
 				filter: `round_group = ${roundGroup}`
@@ -234,13 +265,15 @@ export const actions: Actions = {
 				await adminPb.collection('draft_orders').delete(order.id);
 			}
 
-			for (let i = 0; i < shuffled.length; i++) {
-				await adminPb.collection('draft_orders').create({
-					user: shuffled[i],
-					position: i + 1,
-					round_group: roundGroup
-				});
-			}
+			await Promise.all(
+				shuffled.map((teamId, i) =>
+					adminPb.collection('draft_orders').create({
+						pool_team: teamId,
+						position: i + 1,
+						round_group: roundGroup
+					})
+				)
+			);
 
 			return { orderSuccess: true };
 		} catch (err: unknown) {
@@ -259,6 +292,65 @@ export const actions: Actions = {
 		} catch (err: unknown) {
 			const message = err instanceof Error ? err.message : 'Failed to undo pick';
 			return fail(500, { pickError: message });
+		}
+	},
+
+	saveOrder: async ({ request }) => {
+		await ensureAdminAuth();
+		const formData = await request.formData();
+		const roundGroup = Number(formData.get('round_group') ?? 1);
+		const orderedTeamIds = (formData.get('ordered_team_ids') as string | null)
+			?.split(',')
+			.filter(Boolean) ?? [];
+
+		if (orderedTeamIds.length === 0) return fail(400, { orderError: 'No order provided' });
+
+		try {
+			// Delete existing orders for this round group one at a time (PocketBase requires sequential deletes)
+			const existing = await adminPb.collection('draft_orders').getFullList<DraftOrder>({
+				filter: `round_group = ${roundGroup}`
+			});
+			for (const o of existing) {
+				await adminPb.collection('draft_orders').delete(o.id);
+			}
+
+			// Create new orders in parallel — each has a unique pool_team so no cancellation conflict
+			await Promise.all(
+				orderedTeamIds.map((teamId, i) =>
+					adminPb.collection('draft_orders').create({
+						pool_team: teamId,
+						position: i + 1,
+						round_group: roundGroup
+					})
+				)
+			);
+			return { orderSuccess: true };
+		} catch (err: unknown) {
+			const message = err instanceof Error ? err.message : 'Failed to save order';
+			return fail(500, { orderError: message });
+		}
+	},
+
+	resetDraft: async ({ request }) => {
+		await ensureAdminAuth();
+		const formData = await request.formData();
+		const settingsId = formData.get('settings_id') as string;
+		try {
+			// Delete all picks
+			const picks = await adminPb.collection('draft_picks').getFullList();
+			await Promise.all(picks.map((p) => adminPb.collection('draft_picks').delete(p.id)));
+			// Delete all draft orders
+			const orders = await adminPb.collection('draft_orders').getFullList();
+			await Promise.all(orders.map((o) => adminPb.collection('draft_orders').delete(o.id)));
+			// Reset settings
+			await adminPb.collection('draft_settings').update(settingsId, {
+				status: 'not_started',
+				current_pick_deadline: ''
+			});
+			return { resetSuccess: true };
+		} catch (err: unknown) {
+			const message = err instanceof Error ? err.message : 'Failed to reset draft';
+			return fail(500, { resetError: message });
 		}
 	},
 

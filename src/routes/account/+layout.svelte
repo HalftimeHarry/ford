@@ -2,24 +2,20 @@
 	import '../../app.css';
 	import fordLogo from '$lib/assets/ford_logo.png';
 	import { page } from '$app/stores';
+	import LayoutDashboard from '@lucide/svelte/icons/layout-dashboard';
 	import ClipboardList from '@lucide/svelte/icons/clipboard';
-	import BarChart from '@lucide/svelte/icons/bar-chart';
-	import Newspaper from '@lucide/svelte/icons/newspaper';
-	import Users from '@lucide/svelte/icons/users';
-	import Wrench from '@lucide/svelte/icons/wrench';
 	import Trophy from '@lucide/svelte/icons/trophy';
+	import Newspaper from '@lucide/svelte/icons/newspaper';
 	import UserCog from '@lucide/svelte/icons/user-cog';
 	import LogOut from '@lucide/svelte/icons/log-out';
 
 	let { data, children } = $props();
 
 	const navLinks = [
-		{ href: '/admin', label: 'Draft', icon: ClipboardList, exact: true },
-		{ href: '/admin/scores', label: 'Scores', icon: BarChart },
-		{ href: '/dashboard/blog', label: 'Blog', icon: Newspaper },
-		{ href: '/admin/pool', label: 'Pool Admin', icon: Users },
-		{ href: '/admin/tools', label: 'Tools', icon: Wrench },
-		{ href: '/leaderboard', label: 'Standings', icon: Trophy }
+		{ href: '/dashboard', label: 'Pool', icon: LayoutDashboard, exact: true },
+		{ href: '/dashboard/draft', label: 'Draft', icon: ClipboardList },
+		{ href: '/leaderboard', label: 'Standings', icon: Trophy },
+		{ href: '/dashboard/blog', label: 'Blog', icon: Newspaper }
 	];
 </script>
 
@@ -28,7 +24,7 @@
 		<div class="mx-auto flex max-w-6xl items-center justify-between">
 			<div class="flex items-center gap-3">
 				<img src={fordLogo} alt="Logo" class="h-8 w-8 rounded-full bg-white object-contain p-0.5" />
-				<span class="text-lg font-bold text-primary">Admin Panel</span>
+				<span class="text-lg font-bold text-primary">NCAA Pool 2026</span>
 			</div>
 			<div class="flex items-center gap-1">
 				{#each navLinks as link}
@@ -51,10 +47,7 @@
 
 				<a
 					href="/account/settings"
-					class="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm font-medium transition-colors
-						{$page.url.pathname.startsWith('/account')
-							? 'bg-primary/10 text-primary'
-							: 'text-muted-foreground hover:text-foreground hover:bg-muted'}"
+					class="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm font-medium transition-colors bg-primary/10 text-primary"
 					title="Account settings"
 				>
 					<UserCog class="h-3.5 w-3.5" />

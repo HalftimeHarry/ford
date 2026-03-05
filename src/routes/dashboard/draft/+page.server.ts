@@ -2,23 +2,24 @@ import { fail } from '@sveltejs/kit';
 import { adminPb, ensureAdminAuth } from '$lib/pocketbase';
 import { draftPickSchema } from '$lib/types';
 import type { Actions, PageServerLoad } from './$types';
-import type { NcaaTeam, DraftPick, User, DraftOrder, DraftSettings } from '$lib/types';
+import type { NcaaTeam, DraftPick, DraftOrder, DraftSettings, PoolTeam, JoinRequest } from '$lib/types';
 
 export const load: PageServerLoad = async ({ locals }) => {
 	await ensureAdminAuth();
 	const userId = locals.user!.id;
 
 	try {
-		const [teams, picks, participants, draftOrders] = await Promise.all([
+		const [teams, picks, poolTeams, joinRequests, draftOrders] = await Promise.all([
 			adminPb.collection('ncaa_teams').getFullList<NcaaTeam>({ sort: 'region,seed' }),
 			adminPb.collection('draft_picks').getFullList<DraftPick>({
 				sort: 'pick_number',
 				expand: 'user,team'
 			}),
-			adminPb.collection('users').getFullList<User>({ filter: "role = 'participant'", sort: 'name' }),
+			adminPb.collection('pool_teams').getFullList<PoolTeam>({ sort: 'name' }),
+			adminPb.collection('join_requests').getFullList<JoinRequest>({ expand: 'user,pool_team' }),
 			adminPb.collection('draft_orders').getFullList<DraftOrder>({
 				sort: 'round_group,position',
-				expand: 'user'
+				expand: 'pool_team'
 			})
 		]);
 
@@ -30,7 +31,11 @@ export const load: PageServerLoad = async ({ locals }) => {
 			// no settings yet
 		}
 
-		const entryCount = participants.length;
+		// Find this user's pool team (approved join request)
+		const myRequest = joinRequests.find((r) => r.user === userId && r.status === 'approved');
+		const myPoolTeamId = myRequest?.pool_team ?? null;
+
+		const entryCount = poolTeams.length;
 		const totalPicks = entryCount * 6;
 		const draftComplete = picks.length >= totalPicks;
 		let isOnTheClock = false;
@@ -43,16 +48,20 @@ export const load: PageServerLoad = async ({ locals }) => {
 			const roundGroup = Math.ceil(draftRound / 2);
 			const groupOrders = draftOrders.filter((o) => o.round_group === roundGroup);
 			const order = groupOrders.find((o) => o.position === positionIndex + 1);
-			if (order && order.user === userId) isOnTheClock = true;
+			if (order && myPoolTeamId && order.pool_team === myPoolTeamId) isOnTheClock = true;
 		}
 
 		const canPick = isOnTheClock && (draftSettings?.allow_user_pick ?? false);
 
-		return { teams, picks, participants, draftOrders, draftSettings, userId, isOnTheClock, canPick, entryCount };
+		return {
+			teams, picks, poolTeams, joinRequests, draftOrders, draftSettings,
+			userId, myPoolTeamId, isOnTheClock, canPick, entryCount
+		};
 	} catch {
 		return {
-			teams: [], picks: [], participants: [], draftOrders: [],
-			draftSettings: null, userId: '', isOnTheClock: false, canPick: false, entryCount: 0
+			teams: [], picks: [], poolTeams: [], joinRequests: [], draftOrders: [],
+			draftSettings: null, userId: '', myPoolTeamId: null,
+			isOnTheClock: false, canPick: false, entryCount: 0
 		};
 	}
 };
@@ -63,10 +72,13 @@ export const actions: Actions = {
 		const userId = locals.user!.id;
 		const formData = await request.formData();
 
-		const [allPicks, allOrders, participants] = await Promise.all([
+		const [allPicks, allOrders, poolTeams, joinRequests] = await Promise.all([
 			adminPb.collection('draft_picks').getFullList<DraftPick>({ sort: 'pick_number' }),
 			adminPb.collection('draft_orders').getFullList<DraftOrder>({ sort: 'round_group,position' }),
-			adminPb.collection('users').getFullList<User>({ filter: "role = 'participant'" })
+			adminPb.collection('pool_teams').getFullList<PoolTeam>(),
+			adminPb.collection('join_requests').getFullList<JoinRequest>({
+				filter: `user = "${userId}" && status = "approved"`
+			})
 		]);
 
 		let settings: DraftSettings | null = null;
@@ -82,7 +94,10 @@ export const actions: Actions = {
 			return fail(403, { pickError: 'User picks are not enabled' });
 		}
 
-		const entryCount = participants.length;
+		const myPoolTeamId = joinRequests[0]?.pool_team ?? null;
+		if (!myPoolTeamId) return fail(403, { pickError: 'You are not on an approved pool team' });
+
+		const entryCount = poolTeams.length;
 		const totalPicks = entryCount * 6;
 		if (allPicks.length >= totalPicks) return fail(400, { pickError: 'Draft is complete' });
 
@@ -94,7 +109,7 @@ export const actions: Actions = {
 		const groupOrders = allOrders.filter((o) => o.round_group === roundGroup);
 		const order = groupOrders.find((o) => o.position === positionIndex + 1);
 
-		if (!order || order.user !== userId) {
+		if (!order || order.pool_team !== myPoolTeamId) {
 			return fail(403, { pickError: 'It is not your turn to pick' });
 		}
 

@@ -19,6 +19,44 @@ export const load: PageServerLoad = async () => {
 };
 
 export const actions: Actions = {
+	bulkRecord: async ({ request }) => {
+		await ensureAdminAuth();
+		const formData = await request.formData();
+		const round = formData.get('tournament_round') as string;
+		const loserIds = (formData.get('loser_ids') as string).split(',').filter(Boolean);
+		const allEligibleIds = (formData.get('all_eligible_ids') as string).split(',').filter(Boolean);
+
+		if (!round || allEligibleIds.length === 0) {
+			return fail(400, { bulkError: 'No teams to record' });
+		}
+
+		try {
+			let wins = 0, losses = 0;
+			await Promise.all(
+				allEligibleIds.map(async (teamId) => {
+					const won = !loserIds.includes(teamId);
+					// Skip if result already exists for this team+round
+					const existing = await adminPb.collection('game_results').getList(1, 1, {
+						filter: `team = "${teamId}" && tournament_round = "${round}"`
+					});
+					if (existing.totalItems > 0) return;
+
+					await adminPb.collection('game_results').create({ team: teamId, tournament_round: round, won });
+					if (!won) {
+						await adminPb.collection('ncaa_teams').update(teamId, { eliminated_round: round });
+						losses++;
+					} else {
+						wins++;
+					}
+				})
+			);
+			return { bulkSuccess: `${wins} advanced, ${losses} eliminated` };
+		} catch (err: unknown) {
+			const message = err instanceof Error ? err.message : 'Failed to record results';
+			return fail(500, { bulkError: message });
+		}
+	},
+
 	recordResult: async ({ request }) => {
 		const formData = await request.formData();
 		const data = {

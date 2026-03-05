@@ -20,12 +20,12 @@
 		round_4: 'Elite 8', semifinal: 'Final Four', final: 'Championship'
 	};
 
-	let myRank = $derived(
-		data.leaderboard.findIndex((e) => e.user.id === data.user?.id) + 1
-	);
-
 	const myApprovedRequest = $derived(
 		data.myRequests.find((r) => r.status === 'approved') ?? null
+	);
+
+	let myRank = $derived(
+		data.leaderboard.findIndex((e) => e.poolTeam.id === myApprovedRequest?.pool_team) + 1
 	);
 </script>
 
@@ -201,7 +201,7 @@
 				<Card.CardContent>
 					<LeaderboardComponent
 						entries={data.leaderboard}
-						highlightUserId={data.user?.id ?? ''}
+						highlightTeamId={myApprovedRequest?.pool_team ?? ''}
 						showBreakdown={true}
 					/>
 				</Card.CardContent>

@@ -7,7 +7,7 @@
 
 	let { data, form } = $props();
 
-	let entryCount = $derived(data.entryCount || data.participants.length);
+	let entryCount = $derived(data.entryCount || (data.poolTeams ?? []).length);
 	let totalPicks = $derived(entryCount * 6);
 	let draftedTeamIds = $derived(new Set(data.picks.map((p) => p.team)));
 	let availableTeams = $derived(data.teams.filter((t) => !draftedTeamIds.has(t.id)));
@@ -24,12 +24,12 @@
 		data.draftOrders.filter((o) => o.round_group === currentRoundGroup)
 	);
 
-	let nextPicker = $derived.by(() => {
+	let nextPickerTeam = $derived.by(() => {
 		if (currentGroupOrders.length === 0 || draftComplete) return null;
 		const idx = isReverseRound ? entryCount - 1 - picksInCurrentRound : picksInCurrentRound;
 		const order = currentGroupOrders.find((o) => o.position === idx + 1);
 		if (!order) return null;
-		return data.participants.find((p) => p.id === order.user) ?? null;
+		return (data.poolTeams ?? []).find((t) => t.id === order.pool_team) ?? null;
 	});
 
 	let myPicks = $derived(data.picks.filter((p) => p.user === data.userId || p.expand?.user?.id === data.userId));
@@ -135,11 +135,11 @@
 	</div>
 
 	<!-- On the Clock -->
-	{#if nextPicker && !draftComplete}
+	{#if nextPickerTeam && !draftComplete}
 		<div class="rounded-lg border-2 p-4 {data.isOnTheClock ? 'border-primary bg-primary/10' : 'border-muted'}">
 			<p class="text-xs uppercase tracking-wider text-muted-foreground">On the Clock</p>
 			<p class="text-2xl font-bold {data.isOnTheClock ? 'text-primary' : ''}">
-				{nextPicker.name}
+				{nextPickerTeam.name}
 				{#if data.isOnTheClock}
 					<span class="text-base font-normal text-accent"> — That's you!</span>
 				{/if}
