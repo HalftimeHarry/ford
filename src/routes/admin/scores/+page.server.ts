@@ -24,37 +24,58 @@ export const actions: Actions = {
 		const formData = await request.formData();
 		const round = formData.get('tournament_round') as string;
 		const loserIds = (formData.get('loser_ids') as string).split(',').filter(Boolean);
-		const allEligibleIds = (formData.get('all_eligible_ids') as string).split(',').filter(Boolean);
+		// alive_team_ids = teams with no eliminated_round at submit time (sent from client)
+		const aliveTeamIds = (formData.get('alive_team_ids') as string).split(',').filter(Boolean);
 
-		if (!round || allEligibleIds.length === 0) {
-			return fail(400, { bulkError: 'No teams to record' });
+		if (!round || loserIds.length === 0) {
+			return fail(400, { bulkError: 'No eliminated teams provided' });
 		}
 
-		try {
-			let wins = 0, losses = 0;
-			await Promise.all(
-				allEligibleIds.map(async (teamId) => {
-					const won = !loserIds.includes(teamId);
-					// Skip if result already exists for this team+round
-					const existing = await adminPb.collection('game_results').getList(1, 1, {
-						filter: `team = "${teamId}" && tournament_round = "${round}"`
-					});
-					if (existing.totalItems > 0) return;
+		// Winners = alive teams that are NOT in the loser list
+		const winnerIds = aliveTeamIds.filter((id) => !loserIds.includes(id));
 
-					await adminPb.collection('game_results').create({ team: teamId, tournament_round: round, won });
-					if (!won) {
-						await adminPb.collection('ncaa_teams').update(teamId, { eliminated_round: round });
-						losses++;
-					} else {
-						wins++;
-					}
-				})
-			);
-			return { bulkSuccess: `${wins} advanced, ${losses} eliminated` };
-		} catch (err: unknown) {
-			const message = err instanceof Error ? err.message : 'Failed to record results';
-			return fail(500, { bulkError: message });
+		// Fetch already-recorded results for this round to skip duplicates
+		const existingResults = await adminPb.collection('game_results').getFullList<GameResult>({
+			filter: `tournament_round = "${round}"`,
+			requestKey: null
+		});
+		const alreadyRecordedIds = new Set(existingResults.map((r) => r.team));
+
+		let wins = 0, losses = 0, skipped = 0;
+
+		// Record winners — skip if already exists
+		for (const teamId of winnerIds) {
+			if (alreadyRecordedIds.has(teamId)) { skipped++; continue; }
+			try {
+				await adminPb.collection('game_results').create(
+					{ team: teamId, tournament_round: round, won: true },
+					{ requestKey: null }
+				);
+				wins++;
+			} catch { skipped++; }
 		}
+
+		// Record losers — skip if already exists, update eliminated_round
+		for (const teamId of loserIds) {
+			if (alreadyRecordedIds.has(teamId)) { skipped++; continue; }
+			try {
+				await adminPb.collection('game_results').create(
+					{ team: teamId, tournament_round: round, won: false },
+					{ requestKey: null }
+				);
+				await adminPb.collection('ncaa_teams').update(
+					teamId, { eliminated_round: round }, { requestKey: null }
+				);
+				losses++;
+			} catch { skipped++; }
+		}
+
+		const totalWins = wins + existingResults.filter((r) => r.won).length;
+		const totalLosses = losses + existingResults.filter((r) => !r.won).length;
+		const msg = skipped > 0
+			? `${totalWins} advanced, ${totalLosses} eliminated (${skipped} already recorded)`
+			: `${totalWins} advanced, ${totalLosses} eliminated`;
+		return { bulkSuccess: msg, completedRound: round };
 	},
 
 	recordResult: async ({ request }) => {
@@ -92,6 +113,34 @@ export const actions: Actions = {
 		} catch (err: unknown) {
 			const message = err instanceof Error ? err.message : 'Failed to record result';
 			return fail(500, { resultError: message });
+		}
+	},
+
+	// Swap two teams' results: the "mistake" (wrongly eliminated) and the "replacement" (wrongly advanced)
+	swapPair: async ({ request }) => {
+		await ensureAdminAuth();
+		const formData = await request.formData();
+		const mistakeId = formData.get('mistake_result_id') as string;   // was marked lost, should have won
+		const replacementId = formData.get('replacement_result_id') as string; // was marked won, should have lost
+		if (!mistakeId || !replacementId) return fail(400, { swapError: 'Both result IDs required' });
+		try {
+			const [mistake, replacement] = await Promise.all([
+				adminPb.collection('game_results').getOne<GameResult>(mistakeId),
+				adminPb.collection('game_results').getOne<GameResult>(replacementId)
+			]);
+			// Flip both results
+			await Promise.all([
+				adminPb.collection('game_results').update(mistakeId, { won: true }, { requestKey: null }),
+				adminPb.collection('game_results').update(replacementId, { won: false }, { requestKey: null }),
+				// Clear eliminated_round for the team that should have advanced
+				adminPb.collection('ncaa_teams').update(mistake.team, { eliminated_round: null }, { requestKey: null }),
+				// Set eliminated_round for the team that should have been eliminated
+				adminPb.collection('ncaa_teams').update(replacement.team, { eliminated_round: replacement.tournament_round }, { requestKey: null })
+			]);
+			return { swapSuccess: true };
+		} catch (err: unknown) {
+			const message = err instanceof Error ? err.message : 'Failed to swap results';
+			return fail(500, { swapError: message });
 		}
 	},
 
