@@ -124,19 +124,16 @@ export const actions: Actions = {
 		const replacementId = formData.get('replacement_result_id') as string; // was marked won, should have lost
 		if (!mistakeId || !replacementId) return fail(400, { swapError: 'Both result IDs required' });
 		try {
-			const [mistake, replacement] = await Promise.all([
-				adminPb.collection('game_results').getOne<GameResult>(mistakeId),
-				adminPb.collection('game_results').getOne<GameResult>(replacementId)
-			]);
-			// Flip both results
-			await Promise.all([
-				adminPb.collection('game_results').update(mistakeId, { won: true }, { requestKey: null }),
-				adminPb.collection('game_results').update(replacementId, { won: false }, { requestKey: null }),
-				// Clear eliminated_round for the team that should have advanced
-				adminPb.collection('ncaa_teams').update(mistake.team, { eliminated_round: null }, { requestKey: null }),
-				// Set eliminated_round for the team that should have been eliminated
-				adminPb.collection('ncaa_teams').update(replacement.team, { eliminated_round: replacement.tournament_round }, { requestKey: null })
-			]);
+			// Fetch sequentially — concurrent requests on the same PocketBase client get auto-cancelled
+			const mistake = await adminPb.collection('game_results').getOne<GameResult>(mistakeId, { requestKey: null });
+			const replacement = await adminPb.collection('game_results').getOne<GameResult>(replacementId, { requestKey: null });
+			// Flip results sequentially for the same reason
+			await adminPb.collection('game_results').update(mistakeId, { won: true }, { requestKey: null });
+			await adminPb.collection('game_results').update(replacementId, { won: false }, { requestKey: null });
+			// Clear eliminated_round for the team that should have advanced
+			await adminPb.collection('ncaa_teams').update(mistake.team, { eliminated_round: null }, { requestKey: null });
+			// Set eliminated_round for the team that should have been eliminated
+			await adminPb.collection('ncaa_teams').update(replacement.team, { eliminated_round: replacement.tournament_round }, { requestKey: null });
 			return { swapSuccess: true };
 		} catch (err: unknown) {
 			const message = err instanceof Error ? err.message : 'Failed to swap results';

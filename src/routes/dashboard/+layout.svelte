@@ -7,6 +7,7 @@
 	import Trophy from '@lucide/svelte/icons/trophy';
 	import Newspaper from '@lucide/svelte/icons/newspaper';
 	import BarChart from '@lucide/svelte/icons/bar-chart';
+	import Wrench from '@lucide/svelte/icons/wrench';
 	import UserCog from '@lucide/svelte/icons/user-cog';
 	import LogOut from '@lucide/svelte/icons/log-out';
 
@@ -56,6 +57,16 @@
 					>
 						<BarChart class="h-3.5 w-3.5" />
 						<span class="hidden sm:inline">Scores</span>
+					</a>
+					<a
+						href="/admin/tools"
+						class="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm font-medium transition-colors
+							{$page.url.pathname.startsWith('/admin/tools')
+								? 'bg-primary/10 text-primary'
+								: 'text-muted-foreground hover:text-foreground hover:bg-muted'}"
+					>
+						<Wrench class="h-3.5 w-3.5" />
+						<span class="hidden sm:inline">Tools</span>
 					</a>
 				{/if}
 
