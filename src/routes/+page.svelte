@@ -54,6 +54,43 @@
 		<div class="grid gap-10 lg:grid-cols-5">
 			<!-- Content Section -->
 			<div class="lg:col-span-3 space-y-8">
+				<!-- Latest Updates -->
+				<Card.Card class="border-accent/40 bg-accent/5">
+					<Card.CardHeader class="pb-3">
+						<Card.CardTitle class="flex items-center gap-2 text-xl font-bold text-primary">
+							<CalendarDays class="h-5 w-5" /> Latest Update
+						</Card.CardTitle>
+						<p class="text-xs text-muted-foreground">Posted March 2025</p>
+					</Card.CardHeader>
+					<Card.CardContent class="space-y-4 text-sm">
+						<div class="space-y-1">
+							<p class="font-semibold text-base">Draft Night — Monday, March 16 · 5:30 PM</p>
+							<p class="text-muted-foreground">
+								We cannot do team selection at Saddle or Red's, so we're tentatively set for the
+								<strong>large backroom at Crust</strong> on <strong>Monday, March 16 at 5:30</strong>.
+								Location will be confirmed once locked up.
+							</p>
+						</div>
+						<Separator />
+						<div class="space-y-1">
+							<p class="font-semibold">Confirm your entry</p>
+							<p class="text-muted-foreground">
+								Please confirm you're playing. If I don't have a partner listed for you, let me know.
+							</p>
+						</div>
+						<Separator />
+						<div class="space-y-1">
+							<p class="font-semibold">Entry Fees — due Saturday, March 14</p>
+							<p class="text-muted-foreground">
+								I'll be at Saddle on Saturday after Duke beats UNC to collect fees and answer questions.
+								You can also pay via <strong>Venmo or Zelle</strong>, or leave with
+								<strong>Mike Garcia at Saddle</strong> if he's willing.
+							</p>
+							<p class="font-medium text-destructive">Fees must be paid by Saturday, March 14 to participate.</p>
+						</div>
+					</Card.CardContent>
+				</Card.Card>
+
 				<!-- Pool #2 Entry -->
 				<Card.Card>
 					<Card.CardHeader>

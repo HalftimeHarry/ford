@@ -1,13 +1,12 @@
 <script lang="ts">
 	import type { LeaderboardEntry } from '$lib/pocketbase';
-	import Trophy from '@lucide/svelte/icons/trophy';
 	import ChevronDown from '@lucide/svelte/icons/chevron-down';
 	import ChevronUp from '@lucide/svelte/icons/chevron-up';
 
 	interface Props {
 		entries: LeaderboardEntry[];
-		/** Highlight this user id as "you" */
-		highlightUserId?: string;
+		/** Highlight this pool team id */
+		highlightTeamId?: string;
 		/** Show score breakdown rows (expandable per entry) */
 		showBreakdown?: boolean;
 		/** Limit visible rows; 0 = show all */
@@ -18,7 +17,7 @@
 
 	let {
 		entries,
-		highlightUserId = '',
+		highlightTeamId = '',
 		showBreakdown = false,
 		limit = 0,
 		compact = false
@@ -37,10 +36,10 @@
 
 	let expanded = $state<Set<string>>(new Set());
 
-	function toggle(userId: string) {
+	function toggle(teamId: string) {
 		const next = new Set(expanded);
-		if (next.has(userId)) next.delete(userId);
-		else next.add(userId);
+		if (next.has(teamId)) next.delete(teamId);
+		else next.add(teamId);
 		expanded = next;
 	}
 
@@ -58,7 +57,7 @@
 			<thead>
 				<tr class="bg-primary text-primary-foreground">
 					<th class="{compact ? 'px-3 py-2' : 'px-4 py-2.5'} w-10 text-center font-semibold">#</th>
-					<th class="{compact ? 'px-3 py-2' : 'px-4 py-2.5'} text-left font-semibold">Participant</th>
+					<th class="{compact ? 'px-3 py-2' : 'px-4 py-2.5'} text-left font-semibold">Team</th>
 					<th class="{compact ? 'px-3 py-2' : 'px-4 py-2.5'} text-right font-semibold">Pts</th>
 					{#if showBreakdown}
 						<th class="w-8"></th>
@@ -67,11 +66,11 @@
 			</thead>
 			<tbody>
 				{#each visible as entry, i}
-					{@const isMe = entry.user.id === highlightUserId}
+					{@const isHighlighted = entry.poolTeam.id === highlightTeamId}
 					{@const isFirst = i === 0}
 					<tr
 						class="border-b transition-colors
-							{isMe
+							{isHighlighted
 								? 'bg-primary/10 font-semibold'
 								: isFirst
 									? 'bg-accent/10'
@@ -79,7 +78,7 @@
 										? 'bg-card'
 										: 'bg-muted/50'}
 							{showBreakdown && entry.breakdown.length > 0 ? 'cursor-pointer hover:bg-muted/70' : ''}"
-						onclick={() => showBreakdown && entry.breakdown.length > 0 && toggle(entry.user.id)}
+						onclick={() => showBreakdown && entry.breakdown.length > 0 && toggle(entry.poolTeam.id)}
 					>
 						<td class="{compact ? 'px-3 py-1.5' : 'px-4 py-2.5'} text-center">
 							{#if i < 3}
@@ -89,8 +88,7 @@
 							{/if}
 						</td>
 						<td class="{compact ? 'px-3 py-1.5' : 'px-4 py-2.5'}">
-							{entry.user.name}
-							{#if isMe}<span class="ml-1 text-xs font-normal text-primary">(you)</span>{/if}
+							{entry.poolTeam.name}
 						</td>
 						<td class="{compact ? 'px-3 py-1.5' : 'px-4 py-2.5'} text-right font-bold
 							{isFirst ? 'text-accent' : ''}">
@@ -99,7 +97,7 @@
 						{#if showBreakdown}
 							<td class="pr-2 text-center text-muted-foreground">
 								{#if entry.breakdown.length > 0}
-									{#if expanded.has(entry.user.id)}
+									{#if expanded.has(entry.poolTeam.id)}
 										<ChevronUp class="inline h-3.5 w-3.5" />
 									{:else}
 										<ChevronDown class="inline h-3.5 w-3.5" />
@@ -108,7 +106,7 @@
 							</td>
 						{/if}
 					</tr>
-					{#if showBreakdown && expanded.has(entry.user.id)}
+					{#if showBreakdown && expanded.has(entry.poolTeam.id)}
 						{#each entry.breakdown as b, bi}
 							<tr class="border-b text-xs {bi % 2 === 0 ? 'bg-muted/30' : 'bg-muted/10'}">
 								<td></td>
@@ -126,7 +124,7 @@
 		</table>
 		{#if hasMore}
 			<div class="border-t bg-muted/30 px-4 py-2 text-center text-xs text-muted-foreground">
-				Showing top {limit} of {entries.length} participants
+				Showing top {limit} of {entries.length} teams
 			</div>
 		{/if}
 	</div>

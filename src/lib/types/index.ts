@@ -91,13 +91,13 @@ export interface DraftPick {
 
 export interface DraftOrder {
 	id: string;
-	user: string; // relation -> users
+	pool_team: string; // relation -> pool_teams
 	position: number; // 1-10
 	round_group: number; // 1 = rounds 1-2, 2 = rounds 3-4, 3 = rounds 5-6
 	created: string;
 	updated: string;
 	expand?: {
-		user?: User;
+		pool_team?: PoolTeam;
 	};
 }
 
