@@ -756,8 +756,9 @@
 							class="flex h-8 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring {isLive ? 'w-56' : 'w-48'}"
 						/>
 					</div>
-					<!-- Filter badges: seed groups + regions -->
-					<div class="flex flex-wrap gap-1.5 pt-2">
+					<!-- Filter chips: seed tiers + regions -->
+					<div class="flex flex-wrap items-center gap-1.5 pt-2">
+						<span class="text-xs text-muted-foreground mr-0.5">Seed:</span>
 						{#each SEED_GROUPS as g}
 							<button
 								type="button"
@@ -768,7 +769,8 @@
 										: 'bg-muted/60 text-muted-foreground border-transparent hover:border-primary/40 hover:text-foreground'}"
 							>#{g.label}</button>
 						{/each}
-						<span class="w-px bg-border mx-0.5 self-stretch"></span>
+						<span class="w-px bg-border mx-1 self-stretch"></span>
+						<span class="text-xs text-muted-foreground mr-0.5">Region:</span>
 						{#each REGIONS as r}
 							<button
 								type="button"
@@ -777,13 +779,13 @@
 									{regionFilter === r
 										? 'bg-accent text-accent-foreground border-accent'
 										: 'bg-muted/60 text-muted-foreground border-transparent hover:border-accent/40 hover:text-foreground'}"
-							>{r.slice(0,1)}</button>
+							>{r}</button>
 						{/each}
 						{#if seedFilter !== null || regionFilter !== null}
 							<button
 								type="button"
 								onclick={() => { seedFilter = null; regionFilter = null; }}
-								class="rounded-full px-2.5 py-0.5 text-xs font-semibold text-destructive hover:bg-destructive/10 transition-colors"
+								class="rounded-full px-2.5 py-0.5 text-xs font-semibold text-destructive hover:bg-destructive/10 transition-colors border border-transparent"
 							>✕ Clear</button>
 						{/if}
 					</div>
@@ -928,31 +930,7 @@
 						{/if}
 					</div>
 
-					<!-- Quick Pick suggestion -->
-					<div class="mx-4 mb-3">
-						{#if quickPickTeam}
-							<div class="rounded-lg border border-dashed border-primary/40 bg-muted/30 px-3 py-2.5">
-								<div class="flex items-center justify-between mb-1">
-									<p class="text-xs uppercase tracking-wider text-muted-foreground font-medium">Quick Pick</p>
-									<button type="button" onclick={refreshQuickPick}
-										class="text-xs text-muted-foreground hover:text-foreground transition-colors px-1"
-										title="Shuffle">↺ shuffle</button>
-								</div>
-								<div class="flex items-center gap-2">
-									<span class="rounded bg-primary/10 text-primary font-mono text-xs font-bold px-1.5 py-0.5">#{quickPickTeam.seed}</span>
-									<span class="font-semibold flex-1 text-sm">{quickPickTeam.name}</span>
-									<span class="rounded bg-muted text-muted-foreground text-xs px-1.5 py-0.5">{quickPickTeam.region.slice(0,1)}</span>
-								</div>
-							</div>
-						{:else}
-							<button type="button" onclick={refreshQuickPick}
-								class="w-full rounded-lg border border-dashed border-primary/30 py-2 text-xs text-muted-foreground hover:text-foreground hover:border-primary/60 transition-colors">
-								↺ Get a random pick suggestion
-							</button>
-						{/if}
-					</div>
-
-					<!-- Quick Pick / Auto-pick buttons -->
+					<!-- Quick Pick — random team button -->
 					<div class="px-4 pb-4 flex flex-col gap-2">
 						{#if timerExpired}
 							<form method="POST" action="?/autoPick" use:enhance={() => {
@@ -973,23 +951,42 @@
 								</Button>
 							</form>
 						{/if}
-						<form method="POST" action="?/autoPick" use:enhance={() => {
-								autoPickPending = true; autoPickError = '';
-								return async ({ result, update }) => {
-									await update();
-									autoPickPending = false;
-									if (result.type === 'failure') autoPickError = (result.data as Record<string,string>)?.pickError ?? 'Quick pick failed';
-									else setTimeout(() => location.reload(), 600);
-								};
-							}}>
-							<Button variant="outline" class="w-full" disabled={autoPickPending}>
-								{#if autoPickPending}
-									<LoaderCircle class="h-4 w-4 animate-spin mr-2" />Picking…
-								{:else}
-									Quick Pick Random
-								{/if}
-							</Button>
-						</form>
+
+						<!-- Quick Pick: shows random team, click body to confirm, ↺ to shuffle -->
+						{#if quickPickTeam}
+							<!-- svelte-ignore a11y_no_static_element_interactions -->
+							<div
+								role="button"
+								tabindex="0"
+								onclick={() => { if (!pickPending) { pendingPickTeam = quickPickTeam; pickModalOpen = true; pickConfirmed = false; pickModalSearch = ''; } }}
+								onkeydown={(e) => e.key === 'Enter' && !pickPending && (pendingPickTeam = quickPickTeam, pickModalOpen = true, pickConfirmed = false)}
+								class="w-full rounded-xl border-2 border-primary/30 bg-primary/5 px-4 py-3 text-left cursor-pointer
+									hover:border-primary hover:bg-primary/10 active:scale-[0.98] transition-all
+									{pickPending ? 'opacity-40 pointer-events-none' : ''} group"
+							>
+								<div class="flex items-center justify-between mb-1">
+									<span class="text-xs uppercase tracking-wider text-muted-foreground font-medium">Quick Pick</span>
+									<button type="button" onclick={(e) => { e.stopPropagation(); refreshQuickPick(); }}
+										class="text-xs text-muted-foreground hover:text-foreground transition-colors px-1"
+										title="Shuffle">↺</button>
+								</div>
+								<div class="flex items-center gap-2">
+									<span class="shrink-0 rounded font-mono text-xs font-bold px-1.5 py-0.5
+										{quickPickTeam.seed <= 4 ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400' :
+										 quickPickTeam.seed <= 8 ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400' :
+										 quickPickTeam.seed <= 12 ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-400' :
+										 'bg-muted text-muted-foreground'}">#{quickPickTeam.seed}</span>
+									<span class="font-semibold flex-1 text-sm group-hover:text-primary transition-colors">{quickPickTeam.name}</span>
+									<span class="rounded bg-muted text-muted-foreground text-xs px-1.5 py-0.5">{quickPickTeam.region.slice(0,1)}</span>
+								</div>
+								<p class="text-xs text-muted-foreground mt-1.5 group-hover:text-primary/70 transition-colors">Tap to confirm this pick →</p>
+							</div>
+						{:else}
+							<button type="button" onclick={refreshQuickPick}
+								class="w-full rounded-xl border-2 border-dashed border-primary/30 py-3 text-xs text-muted-foreground hover:text-foreground hover:border-primary/60 transition-colors">
+								↺ Get a random pick suggestion
+							</button>
+						{/if}
 					</div>
 
 					{#if pickPending}
