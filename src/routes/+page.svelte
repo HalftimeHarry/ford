@@ -231,10 +231,10 @@
 								</thead>
 								<tbody>
 									{#each [
-										{ round: '1st Round', pts: '1.5 × seed', special: false },
-										{ round: '2nd Round', pts: '2.5 × seed', special: false },
-										{ round: '3rd Round (Sweet 16)', pts: '3.5 × seed', special: false },
-										{ round: '4th Round (Elite 8)', pts: '4.5 × seed', special: false },
+										{ round: '1st Round', pts: '1 × seed', special: false },
+										{ round: '2nd Round', pts: '2 × seed', special: false },
+										{ round: '3rd Round (Sweet 16)', pts: '3 × seed', special: false },
+										{ round: '4th Round (Elite 8)', pts: '4 × seed', special: false },
 										{ round: 'Semi-Final (Final Four)', pts: '25 pts', special: true },
 										{ round: 'Final (Championship)', pts: '50 pts', special: true },
 									] as row, i}

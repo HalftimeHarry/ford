@@ -24,10 +24,10 @@ export type TournamentRound = (typeof TOURNAMENT_ROUNDS)[number];
 
 // Scoring: seed-based multipliers for rounds 1-4, flat points for semifinal/final
 export const SEED_MULTIPLIERS: Record<Exclude<TournamentRound, 'semifinal' | 'final'>, number> = {
-	round_1: 1.5,
-	round_2: 2.5,
-	round_3: 3.5,
-	round_4: 4.5
+	round_1: 1,
+	round_2: 2,
+	round_3: 3,
+	round_4: 4
 };
 
 export const FLAT_POINTS = { semifinal: 25, final: 50 } as const;
