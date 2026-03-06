@@ -634,16 +634,33 @@
 			{/each}
 			<!-- Current pick order (inline) -->
 			{#if currentGroupOrders.length > 0}
-				<div class="flex items-center gap-1 ml-2 border-l pl-2">
-					<span class="text-xs text-muted-foreground font-medium shrink-0">Order:</span>
-					{#each currentGroupOrders.sort((a, b) => a.position - b.position) as order}
-						{@const pt = (data.poolTeams ?? []).find((t) => t.id === order.pool_team)}
-						{@const isOnClock = nextPickerTeam?.id === order.pool_team}
-						<span class="text-xs rounded px-1.5 py-0.5 shrink-0
-							{isOnClock ? 'bg-primary text-primary-foreground font-bold' : 'bg-muted text-muted-foreground'}">
-							{order.position}. {pt?.name ?? '?'}
-						</span>
-					{/each}
+				{@const sorted = currentGroupOrders.slice().sort((a, b) => a.position - b.position)}
+				{@const row1 = sorted.slice(0, 5)}
+				{@const row2 = sorted.slice(5)}
+				<div class="ml-2 border-l pl-2 space-y-0.5">
+					<span class="text-xs text-muted-foreground font-medium">Order:</span>
+					<div class="flex flex-wrap gap-1">
+						{#each row1 as order}
+							{@const pt = (data.poolTeams ?? []).find((t) => t.id === order.pool_team)}
+							{@const isOnClock = nextPickerTeam?.id === order.pool_team}
+							<span class="text-xs rounded px-1.5 py-0.5
+								{isOnClock ? 'bg-primary text-primary-foreground font-bold' : 'bg-muted text-muted-foreground'}">
+								{order.position}. {pt?.name ?? '?'}
+							</span>
+						{/each}
+					</div>
+					{#if row2.length > 0}
+						<div class="flex flex-wrap gap-1">
+							{#each row2 as order}
+								{@const pt = (data.poolTeams ?? []).find((t) => t.id === order.pool_team)}
+								{@const isOnClock = nextPickerTeam?.id === order.pool_team}
+								<span class="text-xs rounded px-1.5 py-0.5
+									{isOnClock ? 'bg-primary text-primary-foreground font-bold' : 'bg-muted text-muted-foreground'}">
+									{order.position}. {pt?.name ?? '?'}
+								</span>
+							{/each}
+						</div>
+					{/if}
 				</div>
 			{/if}
 			<!-- Restart (right-aligned) -->
