@@ -16,6 +16,8 @@
 	import Hash from '@lucide/svelte/icons/hash';
 	import Zap from '@lucide/svelte/icons/zap';
 	import LoaderCircle from '@lucide/svelte/icons/loader-circle';
+	import Search from '@lucide/svelte/icons/search';
+	import ListFilter from '@lucide/svelte/icons/list-filter';
 
 	let { data, form } = $props();
 
@@ -97,6 +99,31 @@
 
 
 	let confirmingOrder = $state(false);
+
+	// --- Pick modal (mobile-friendly team picker) ---
+	let pickModalOpen = $state(false);
+	let pickModalSearch = $state('');
+	let pickModalPending = $state(false);
+
+	let pickModalTeams = $derived.by(() => {
+		const q = pickModalSearch.toLowerCase().trim();
+		const teams = availableTeams;
+		if (!q) return teams;
+		return teams.filter(
+			(t) => t.name.toLowerCase().includes(q) || t.seed.toString() === q || t.region.toLowerCase().includes(q)
+		);
+	});
+
+	function openPickModal() {
+		pickModalSearch = '';
+		pickModalOpen = true;
+	}
+
+	async function pickModalSelect(teamId: string) {
+		if (!nextPickerTeam || pickPending) return;
+		pickModalOpen = false;
+		await submitPick(nextPickerTeam.id, teamId, currentDraftRound, nextPickNumber);
+	}
 
 	let teamSearch = $state('');
 
@@ -768,10 +795,18 @@
 						</div>
 					{/if}
 
-					<!-- Drop zone -->
+					<!-- Pick Team button (always visible, opens modal) -->
+					<div class="px-4 py-3 border-b border-primary/10">
+						<Button onclick={openPickModal} class="w-full" disabled={pickPending}>
+							<ListFilter class="h-4 w-4 mr-2" />
+							Pick Team
+						</Button>
+					</div>
+
+					<!-- Drop zone (desktop drag-and-drop) -->
 					<!-- svelte-ignore a11y_no_static_element_interactions -->
 					<div
-						class="flex flex-col items-center justify-center p-8 transition-colors
+						class="hidden sm:flex flex-col items-center justify-center p-8 transition-colors
 							{dropHover ? 'bg-primary/15' : 'bg-transparent'}"
 						ondragover={handleDragOver}
 						ondragleave={handleDragLeave}
@@ -853,3 +888,69 @@
 
 	{/if}
 </div>
+
+<!-- Pick Team Modal (admin) -->
+{#if pickModalOpen}
+	<div
+		class="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60"
+		role="dialog"
+		aria-modal="true"
+		aria-label="Pick a team"
+	>
+		<div class="bg-card w-full sm:max-w-md sm:mx-4 sm:rounded-xl rounded-t-xl shadow-2xl flex flex-col max-h-[85vh]">
+			<!-- Header -->
+			<div class="flex items-center justify-between px-4 py-3 border-b shrink-0">
+				<div>
+					<p class="font-semibold">Pick a Team</p>
+					{#if nextPickerTeam}
+						<p class="text-xs text-muted-foreground">for {nextPickerTeam.name} · Pick #{nextPickNumber}</p>
+					{/if}
+				</div>
+				<button type="button" onclick={() => pickModalOpen = false} class="text-muted-foreground hover:text-foreground p-1 rounded">
+					<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+					</svg>
+				</button>
+			</div>
+
+			<!-- Search -->
+			<div class="px-4 py-2 border-b shrink-0">
+				<div class="relative">
+					<Search class="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+					<input
+						type="text"
+						placeholder="Search by name, seed, or region…"
+						bind:value={pickModalSearch}
+						autofocus
+						class="w-full rounded-md border border-input bg-background pl-8 pr-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+					/>
+				</div>
+			</div>
+
+			<!-- Team list -->
+			<div class="overflow-y-auto flex-1 px-2 py-2 space-y-0.5">
+				{#each pickModalTeams as team (team.id)}
+					<button
+						type="button"
+						onclick={() => pickModalSelect(team.id)}
+						disabled={pickPending}
+						class="w-full flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-left hover:bg-primary/10 active:bg-primary/20 transition-colors disabled:opacity-50"
+					>
+						<span class="w-6 text-right font-mono text-xs text-muted-foreground shrink-0">#{team.seed}</span>
+						<span class="flex-1 font-medium">{team.name}</span>
+						<span class="text-xs text-muted-foreground shrink-0">{team.region}</span>
+					</button>
+				{:else}
+					<p class="text-sm text-muted-foreground text-center py-8">No teams match "{pickModalSearch}"</p>
+				{/each}
+			</div>
+
+			{#if pickPending}
+				<div class="px-4 py-3 border-t shrink-0 flex items-center justify-center gap-2 text-sm text-muted-foreground">
+					<LoaderCircle class="h-4 w-4 animate-spin" />
+					Saving pick…
+				</div>
+			{/if}
+		</div>
+	</div>
+{/if}
