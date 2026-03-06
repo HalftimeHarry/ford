@@ -100,6 +100,7 @@
 
 	let confirmingOrder = $state(false);
 	let startingDraft = $state(false);
+	let showGroupInfo = $state(false);
 
 	// --- Pick modal (mobile-friendly team picker) ---
 	let pickModalOpen = $state(false);
@@ -643,7 +644,35 @@
 								<Shuffle class="h-3 w-3" /> Randomize
 							</Button>
 						</div>
-						<p class="text-xs text-muted-foreground mt-1">Drag to reorder or randomize, then hit Confirm Order. Start Draft unlocks once confirmed.</p>
+						<p class="text-xs text-muted-foreground mt-1">
+							Drag to reorder or randomize, then hit Confirm Order. Start Draft unlocks once confirmed.
+							<button type="button" onclick={() => showGroupInfo = !showGroupInfo}
+								class="text-primary underline-offset-2 hover:underline ml-1">{showGroupInfo ? 'Less ↑' : 'More…'}</button>
+						</p>
+
+						{#if showGroupInfo}
+							<div class="mt-3 rounded-lg bg-muted/50 border border-border p-3 space-y-2.5 text-xs text-muted-foreground">
+								<p class="font-semibold text-foreground text-sm">How Draft Groups Work</p>
+								<p>The draft is split into <strong>3 groups of 2 rounds each</strong> (6 rounds total for 10 teams = 60 picks). Each group uses its own lottery order, so the pick order can change between groups.</p>
+
+								<div class="space-y-1.5">
+									<div class="flex gap-2">
+										<span class="shrink-0 rounded bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400 font-bold px-1.5 py-0.5">G1</span>
+										<span><strong>Rounds 1–2</strong> — First 2 picks per team. Snake order: round 1 goes 1→10, round 2 reverses 10→1.</span>
+									</div>
+									<div class="flex gap-2">
+										<span class="shrink-0 rounded bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-400 font-bold px-1.5 py-0.5">G2</span>
+										<span><strong>Rounds 3–4</strong> — A new lottery order is set for this group. Same snake pattern.</span>
+									</div>
+									<div class="flex gap-2">
+										<span class="shrink-0 rounded bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-400 font-bold px-1.5 py-0.5">G3</span>
+										<span><strong>Rounds 5–6</strong> — Final group. Another new lottery order. Last 2 picks per team.</span>
+									</div>
+								</div>
+
+								<p class="border-t border-border pt-2">You are currently setting the order for <strong>Group 1</strong>. Groups 2 and 3 can be configured before their rounds begin.</p>
+							</div>
+						{/if}
 					</Card.CardHeader>
 					<Card.CardContent class="p-2">
 						<ol class="space-y-1">
