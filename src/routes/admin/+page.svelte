@@ -952,34 +952,26 @@
 							</form>
 						{/if}
 
-						<!-- Quick Pick: shows random team, click body to confirm, ↺ to shuffle -->
+						<!-- Quick Pick: shows random team, click to go to confirmation -->
 						{#if quickPickTeam}
-							<!-- svelte-ignore a11y_no_static_element_interactions -->
-							<div
-								role="button"
-								tabindex="0"
-								onclick={() => { if (!pickPending) { pendingPickTeam = quickPickTeam; pickModalOpen = true; pickConfirmed = false; pickModalSearch = ''; } }}
-								onkeydown={(e) => e.key === 'Enter' && !pickPending && (pendingPickTeam = quickPickTeam, pickModalOpen = true, pickConfirmed = false)}
-								class="w-full rounded-xl border-2 border-primary/30 bg-primary/5 px-4 py-3 text-left cursor-pointer
-									hover:border-primary hover:bg-primary/10 active:scale-[0.98] transition-all
-									{pickPending ? 'opacity-40 pointer-events-none' : ''} group"
-							>
-								<div class="flex items-center justify-between mb-1">
+							<div class="rounded-xl border-2 border-primary/30 bg-primary/5 overflow-hidden">
+								<div class="flex items-center justify-between px-3 pt-2 pb-1">
 									<span class="text-xs uppercase tracking-wider text-muted-foreground font-medium">Quick Pick</span>
-									<button type="button" onclick={(e) => { e.stopPropagation(); refreshQuickPick(); }}
-										class="text-xs text-muted-foreground hover:text-foreground transition-colors px-1"
-										title="Shuffle">↺</button>
+									<button type="button" onclick={refreshQuickPick}
+										class="text-xs text-muted-foreground hover:text-foreground transition-colors px-1 py-0.5 rounded hover:bg-muted"
+										title="Shuffle">↺ shuffle</button>
 								</div>
-								<div class="flex items-center gap-2">
-									<span class="shrink-0 rounded font-mono text-xs font-bold px-1.5 py-0.5
-										{quickPickTeam.seed <= 4 ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400' :
-										 quickPickTeam.seed <= 8 ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400' :
-										 quickPickTeam.seed <= 12 ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-400' :
-										 'bg-muted text-muted-foreground'}">#{quickPickTeam.seed}</span>
-									<span class="font-semibold flex-1 text-sm group-hover:text-primary transition-colors">{quickPickTeam.name}</span>
-									<span class="rounded bg-muted text-muted-foreground text-xs px-1.5 py-0.5">{quickPickTeam.region.slice(0,1)}</span>
-								</div>
-								<p class="text-xs text-muted-foreground mt-1.5 group-hover:text-primary/70 transition-colors">Tap to confirm this pick →</p>
+								<button
+									type="button"
+									disabled={pickPending}
+									onclick={() => { pendingPickTeam = quickPickTeam; pickModalOpen = true; pickConfirmed = false; pickModalSearch = ''; }}
+									class="w-full flex items-center gap-2 px-3 pb-3 pt-1 text-left hover:bg-primary/10 active:bg-primary/20 transition-colors disabled:opacity-40"
+								>
+									<span class="shrink-0 rounded font-mono text-xs font-bold px-1.5 py-0.5 {quickPickTeam.seed <= 4 ? 'bg-emerald-100 text-emerald-700' : quickPickTeam.seed <= 8 ? 'bg-blue-100 text-blue-700' : quickPickTeam.seed <= 12 ? 'bg-orange-100 text-orange-700' : 'bg-muted text-muted-foreground'}">#{quickPickTeam.seed}</span>
+									<span class="font-semibold flex-1 text-sm">{quickPickTeam.name}</span>
+									<span class="rounded bg-muted text-muted-foreground text-xs px-1.5 py-0.5 shrink-0">{quickPickTeam.region.slice(0,1)}</span>
+									<span class="text-xs text-primary shrink-0">→</span>
+								</button>
 							</div>
 						{:else}
 							<button type="button" onclick={refreshQuickPick}
