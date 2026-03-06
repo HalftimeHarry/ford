@@ -10,6 +10,7 @@
 	import Trophy from '@lucide/svelte/icons/trophy';
 	import UserCog from '@lucide/svelte/icons/user-cog';
 	import LogOut from '@lucide/svelte/icons/log-out';
+	import ShieldHalf from '@lucide/svelte/icons/shield-half';
 
 	let { data, children } = $props();
 
@@ -18,6 +19,7 @@
 		{ href: '/admin/scores', label: 'Scores', icon: BarChart },
 		{ href: '/dashboard/blog', label: 'Blog', icon: Newspaper },
 		{ href: '/admin/pool', label: 'Pool Admin', icon: Users },
+		{ href: '/admin/ncaa-teams', label: 'NCAA Teams', icon: ShieldHalf },
 		{ href: '/admin/tools', label: 'Tools', icon: Wrench },
 		{ href: '/leaderboard', label: 'Standings', icon: Trophy }
 	];

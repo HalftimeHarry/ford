@@ -15,6 +15,7 @@
 	import ChartBar from '@lucide/svelte/icons/chart-bar';
 	import Hash from '@lucide/svelte/icons/hash';
 	import Zap from '@lucide/svelte/icons/zap';
+	import LoaderCircle from '@lucide/svelte/icons/loader-circle';
 
 	let { data, form } = $props();
 
@@ -94,6 +95,8 @@
 		draftOrder = shuffled;
 	}
 
+
+	let confirmingOrder = $state(false);
 
 	let teamSearch = $state('');
 
@@ -320,22 +323,34 @@
 			{#if data.picks.length === 0}
 				<p class="text-sm text-muted-foreground">No picks yet.</p>
 			{:else}
-				<div class="overflow-hidden rounded-lg border">
+				<div class="overflow-hidden rounded-lg border text-sm">
 					{#each [...data.picks].reverse() as pick, i}
 						{@const team = pick.expand?.team}
 						{@const pickUserId = pick.user}
 						{@const pickPoolTeamId = (data.joinRequests ?? []).find((r) => r.user === pickUserId && r.status === 'approved')?.pool_team}
 						{@const pickPoolTeam = (data.poolTeams ?? []).find((t) => t.id === pickPoolTeamId)}
-						<div class="flex items-center gap-2 px-3 py-1.5 text-sm {i % 2 === 0 ? 'bg-card' : 'bg-muted/50'}">
-							<Hash class="h-3 w-3 shrink-0 text-muted-foreground" />
-							<span class="w-5 text-right font-mono text-xs text-muted-foreground">{pick.pick_number}</span>
-							<span class="font-medium truncate">{pickPoolTeam?.name ?? '?'}</span>
-							<span class="text-muted-foreground">—</span>
-							<span class="flex-1 truncate">({team?.seed}) {team?.name ?? '?'}</span>
-							<span class="text-xs text-muted-foreground shrink-0">R{pick.draft_round}</span>
-							<form method="POST" action="?/undoPick" use:enhance>
+						{@const roundGroup = pick.round_group ?? 1}
+						<div class="flex items-center gap-2 px-3 py-2 {i % 2 === 0 ? 'bg-card' : 'bg-muted/40'}">
+							<!-- Pick number -->
+							<span class="w-6 text-right font-mono text-xs text-muted-foreground shrink-0">#{pick.pick_number}</span>
+							<!-- Round group badge -->
+							<span class="shrink-0 rounded px-1 py-0.5 text-xs font-bold leading-none
+								{roundGroup === 1 ? 'bg-blue-500/15 text-blue-400'
+								: roundGroup === 2 ? 'bg-purple-500/15 text-purple-400'
+								: 'bg-orange-500/15 text-orange-400'}">
+								G{roundGroup}
+							</span>
+							<!-- Pool team -->
+							<span class="font-semibold truncate min-w-0 flex-1">{pickPoolTeam?.name ?? '?'}</span>
+							<!-- NCAA team -->
+							<span class="shrink-0 text-muted-foreground text-xs">#{team?.seed}</span>
+							<span class="truncate text-right min-w-0 max-w-[120px]">{team?.name ?? '?'}</span>
+							<!-- Region badge -->
+							<span class="shrink-0 hidden sm:inline rounded px-1 py-0.5 text-xs bg-muted text-muted-foreground leading-none">{team?.region?.slice(0,1) ?? ''}</span>
+							<!-- Undo -->
+							<form method="POST" action="?/undoPick" use:enhance class="shrink-0">
 								<input type="hidden" name="pick_id" value={pick.id} />
-								<button type="submit" class="text-xs text-destructive hover:underline shrink-0">undo</button>
+								<button type="submit" class="text-xs text-destructive/50 hover:text-destructive">undo</button>
 							</form>
 						</div>
 					{/each}
@@ -579,11 +594,22 @@
 							{/each}
 						</ol>
 						<div class="mt-2 flex gap-2">
-							<form method="POST" action="?/saveOrder" use:enhance class="flex-1">
+							<form method="POST" action="?/saveOrder" use:enhance={() => {
+									confirmingOrder = true;
+									return async ({ update }) => {
+										await update();
+										confirmingOrder = false;
+									};
+								}} class="flex-1">
 								<input type="hidden" name="round_group" value="1" />
 								<input type="hidden" name="ordered_team_ids" value={draftOrder.join(',')} />
-								<Button type="submit" variant={orderConfirmed ? 'outline' : 'default'} class="w-full" size="sm">
-									{orderConfirmed ? 'Re-confirm Order' : 'Confirm Order'}
+								<Button type="submit" variant={orderConfirmed ? 'outline' : 'default'} class="w-full" size="sm" disabled={confirmingOrder}>
+									{#if confirmingOrder}
+										<LoaderCircle class="h-3.5 w-3.5 animate-spin mr-1.5" />
+										Saving…
+									{:else}
+										{orderConfirmed ? 'Re-confirm Order' : 'Confirm Order'}
+									{/if}
 								</Button>
 							</form>
 						</div>
@@ -658,7 +684,7 @@
 											{@const drafted = draftedTeamIds.has(team.id)}
 											<!-- svelte-ignore a11y_no_static_element_interactions -->
 											<div
-												class="flex items-center gap-2 rounded transition-all
+												class="flex items-center gap-1.5 rounded transition-all
 													{isLive ? 'px-2 py-1.5 text-base' : 'px-2 py-1 text-sm'}
 													{drafted
 													? 'line-through opacity-25'
@@ -673,9 +699,22 @@
 												<span class="text-right font-mono text-muted-foreground shrink-0 {isLive ? 'w-6 text-sm' : 'w-5 text-xs'}">{team.seed}</span>
 												<span class="flex-1 truncate">{team.name}</span>
 												{#if !drafted && isLive}
-													<svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 text-muted-foreground/40 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+													<!-- Drag handle: hidden on small screens -->
+													<svg xmlns="http://www.w3.org/2000/svg" class="hidden sm:block h-3.5 w-3.5 text-muted-foreground/40 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
 														<path stroke-linecap="round" stroke-linejoin="round" d="M8 9l4-4 4 4m0 6l-4 4-4-4" />
 													</svg>
+													<!-- Pick button: shown on small screens instead of drag -->
+													<button
+														type="button"
+														class="sm:hidden shrink-0 rounded bg-primary px-2 py-0.5 text-xs font-semibold text-primary-foreground hover:bg-primary/80 disabled:opacity-40"
+														disabled={pickPending || !nextPickerTeam}
+														onclick={() => nextPickerTeam && submitPick(
+															nextPickerTeam.id,
+															team.id,
+															nextPickerOrder?.draft_round ?? 1,
+															(data.picks.length + 1)
+														)}
+													>Pick</button>
 												{/if}
 											</div>
 										{/each}
