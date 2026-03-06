@@ -45,6 +45,78 @@
 	let picksInCurrentRound = $derived(entryCount > 0 ? data.picks.length % entryCount : 0);
 	let isReverseRound = $derived(currentDraftRound % 2 === 0);
 
+	// Picks remaining in the current group (each group = 2 rounds × entryCount picks)
+	let picksPerGroup = $derived(entryCount * 2);
+	let picksCompletedInGroup = $derived((currentDraftRound <= 2 ? data.picks.length : currentDraftRound <= 4 ? data.picks.length - picksPerGroup : data.picks.length - picksPerGroup * 2));
+	let picksRemainingInGroup = $derived(picksPerGroup - picksCompletedInGroup);
+
+	// Next group number (null if already in G3 or draft complete)
+	let nextGroup = $derived(currentRoundGroup < 3 && !draftComplete ? currentRoundGroup + 1 : null);
+
+	// Whether the next group already has a confirmed order
+	let nextGroupHasOrder = $derived(
+		nextGroup !== null &&
+		(data.draftOrders ?? []).filter((o) => o.round_group === nextGroup).length === entryCount
+	);
+
+	// Show the next-group order panel when in the last round of the current group
+	// i.e. picksRemainingInGroup <= entryCount (last round of the group)
+	let showNextGroupPanel = $derived(
+		isLive && !draftComplete && nextGroup !== null && picksRemainingInGroup <= entryCount
+	);
+
+	// Drag state for the next-group order panel (mirrors draftOrder for G1)
+	let nextGroupOrder = $state<string[]>([]);
+	let nextGroupDraggedId = $state('');
+	let nextGroupDragOverIdx = $state(-1);
+	let nextGroupConfirmingOrder = $state(false);
+
+	// Initialise / sync nextGroupOrder when the panel becomes visible or nextGroup changes
+	$effect(() => {
+		if (!showNextGroupPanel || nextGroup === null) return;
+		const existing = (data.draftOrders ?? [])
+			.filter((o) => o.round_group === nextGroup)
+			.sort((a, b) => a.position - b.position)
+			.map((o) => o.pool_team);
+		if (existing.length === entryCount) {
+			nextGroupOrder = existing;
+		} else {
+			// Default to current G1 order or pool team list order
+			nextGroupOrder = (data.poolTeams ?? []).map((t) => t.id);
+		}
+	});
+
+	function nextGroupDragStart(e: DragEvent, teamId: string) {
+		nextGroupDraggedId = teamId;
+		e.dataTransfer!.effectAllowed = 'move';
+	}
+
+	function nextGroupDragOver(e: DragEvent, idx: number) {
+		e.preventDefault();
+		nextGroupDragOverIdx = idx;
+	}
+
+	function nextGroupDrop(idx: number) {
+		if (!nextGroupDraggedId) return;
+		const from = nextGroupOrder.indexOf(nextGroupDraggedId);
+		if (from === -1 || from === idx) { nextGroupDraggedId = ''; nextGroupDragOverIdx = -1; return; }
+		const updated = [...nextGroupOrder];
+		updated.splice(from, 1);
+		updated.splice(idx, 0, nextGroupDraggedId);
+		nextGroupOrder = updated;
+		nextGroupDraggedId = '';
+		nextGroupDragOverIdx = -1;
+	}
+
+	function randomizeNextGroupOrder() {
+		const shuffled = [...nextGroupOrder];
+		for (let i = shuffled.length - 1; i > 0; i--) {
+			const j = Math.floor(Math.random() * (i + 1));
+			[shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+		}
+		nextGroupOrder = shuffled;
+	}
+
 	// The pool team currently on the clock
 	let nextPickerTeam = $derived.by(() => {
 		if (currentGroupOrders.length === 0 || draftComplete) return null;
@@ -540,18 +612,13 @@
 				<input type="hidden" name="settings_id" value={settings.id} />
 				<Button type="submit" variant="outline" size="sm" class="h-7 text-xs">Pause</Button>
 			</form>
-			<!-- Draw next round group lotteries -->
-			{#if currentRoundGroup < 3}
-				{#each [2, 3].filter((g) => g > currentRoundGroup) as group}
-					{@const hasOrder = (data.draftOrders ?? []).some((o) => o.round_group === group)}
-					<form method="POST" action="?/generateOrder" use:enhance>
-						<input type="hidden" name="round_group" value={group} />
-						<Button type="submit" variant="outline" size="sm" class="h-7 text-xs" disabled={hasOrder}>
-							{hasOrder ? `Group ${group} ✅` : `Draw Group ${group}`}
-						</Button>
-					</form>
-				{/each}
-			{/if}
+			<!-- Group order status badges -->
+			{#each [2, 3].filter((g) => g > currentRoundGroup) as group}
+				{@const hasOrder = (data.draftOrders ?? []).filter((o) => o.round_group === group).length === entryCount}
+				{#if hasOrder}
+					<span class="text-xs rounded px-2 py-0.5 bg-muted text-muted-foreground">G{group} ✅</span>
+				{/if}
+			{/each}
 			<!-- Current pick order (inline) -->
 			{#if currentGroupOrders.length > 0}
 				<div class="flex items-center gap-1 ml-2 border-l pl-2">
@@ -575,6 +642,76 @@
 			{#if form?.resetError}
 				<p class="text-xs text-destructive">{form.resetError}</p>
 			{/if}
+		</div>
+	{/if}
+
+	<!-- Next Group Order Panel: appears during last round of current group -->
+	{#if showNextGroupPanel && nextGroup !== null}
+		{@const groupColors = ['', 'text-blue-600', 'text-purple-600', 'text-orange-600']}
+		{@const groupBg = ['', 'border-blue-300 bg-blue-50 dark:border-blue-800 dark:bg-blue-950/30', 'border-purple-300 bg-purple-50 dark:border-purple-800 dark:bg-purple-950/30', 'border-orange-300 bg-orange-50 dark:border-orange-800 dark:bg-orange-950/30']}
+		{@const badgeCls = ['', 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400', 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-400', 'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-400']}
+		<div class="rounded-xl border-2 {groupBg[nextGroup]} p-4 space-y-3">
+			<div class="flex items-center justify-between gap-3 flex-wrap">
+				<div class="flex items-center gap-2">
+					<span class="rounded font-bold text-xs px-2 py-0.5 {badgeCls[nextGroup]}">G{nextGroup}</span>
+					<div>
+						<p class="font-bold text-sm {groupColors[nextGroup]}">Lottery Order (Group {nextGroup})</p>
+						<p class="text-xs text-muted-foreground">{picksRemainingInGroup} pick{picksRemainingInGroup === 1 ? '' : 's'} left in Group {currentRoundGroup} — set the order before it ends</p>
+					</div>
+				</div>
+				<div class="flex items-center gap-2">
+					{#if nextGroupHasOrder}
+						<span class="text-xs text-accent font-medium">✅ Confirmed</span>
+					{/if}
+					<Button variant="outline" size="sm" class="h-7 px-2 text-xs gap-1" onclick={randomizeNextGroupOrder}>
+						<Shuffle class="h-3 w-3" /> Randomize
+					</Button>
+				</div>
+			</div>
+
+			<!-- Drag list -->
+			<ol class="grid grid-cols-2 sm:grid-cols-5 gap-1.5">
+				{#each nextGroupOrder as teamId, i}
+					{@const pt = (data.poolTeams ?? []).find((t) => t.id === teamId)}
+					<!-- svelte-ignore a11y_no_static_element_interactions -->
+					<li
+						draggable="true"
+						ondragstart={(e) => nextGroupDragStart(e, teamId)}
+						ondragover={(e) => nextGroupDragOver(e, i)}
+						ondrop={() => nextGroupDrop(i)}
+						ondragend={() => { nextGroupDraggedId = ''; nextGroupDragOverIdx = -1; }}
+						class="flex items-center gap-1.5 rounded-lg px-2 py-2 text-xs cursor-grab active:cursor-grabbing transition-colors
+							{nextGroupDragOverIdx === i ? 'bg-primary/20 border-2 border-primary' : 'bg-background border border-border hover:border-primary/40'}"
+					>
+						<span class="w-4 text-right text-muted-foreground font-mono shrink-0">{i + 1}</span>
+						<span class="flex-1 truncate font-medium">{pt?.name ?? teamId}</span>
+						<svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 text-muted-foreground/40 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+							<path stroke-linecap="round" stroke-linejoin="round" d="M8 9l4-4 4 4m0 6l-4 4-4-4" />
+						</svg>
+					</li>
+				{/each}
+			</ol>
+
+			<!-- Confirm button -->
+			<form method="POST" action="?/saveOrder" use:enhance={() => {
+					nextGroupConfirmingOrder = true;
+					return async ({ update }) => {
+						await update();
+						nextGroupConfirmingOrder = false;
+					};
+				}}>
+				<input type="hidden" name="round_group" value={nextGroup} />
+				<input type="hidden" name="ordered_team_ids" value={nextGroupOrder.join(',')} />
+				<Button type="submit" class="w-full sm:w-auto" size="sm"
+					variant={nextGroupHasOrder ? 'outline' : 'default'}
+					disabled={nextGroupConfirmingOrder}>
+					{#if nextGroupConfirmingOrder}
+						<LoaderCircle class="h-3.5 w-3.5 animate-spin mr-1.5" />Saving…
+					{:else}
+						{nextGroupHasOrder ? `Re-confirm Group ${nextGroup} Order` : `Confirm Group ${nextGroup} Order`}
+					{/if}
+				</Button>
+			</form>
 		</div>
 	{/if}
 
