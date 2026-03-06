@@ -50,20 +50,33 @@
 	let picksCompletedInGroup = $derived((currentDraftRound <= 2 ? data.picks.length : currentDraftRound <= 4 ? data.picks.length - picksPerGroup : data.picks.length - picksPerGroup * 2));
 	let picksRemainingInGroup = $derived(picksPerGroup - picksCompletedInGroup);
 
-	// Next group number (null if already in G3 or draft complete)
-	let nextGroup = $derived(currentRoundGroup < 3 && !draftComplete ? currentRoundGroup + 1 : null);
+	// Whether the current group has a confirmed order
+	let currentGroupHasOrder = $derived(
+		(data.draftOrders ?? []).filter((o) => o.round_group === currentRoundGroup).length === entryCount
+	);
 
-	// Whether the next group already has a confirmed order
+	// The group we need to set an order for:
+	// - Current group if it has no orders (e.g. seeded all at once, or jumped into mid-draft)
+	// - Next group if we're in the last round of the current group
+	let pendingOrderGroup = $derived.by(() => {
+		if (!isLive || draftComplete) return null;
+		// Current group missing orders — must set before picks can proceed
+		if (!currentGroupHasOrder) return currentRoundGroup;
+		// Last round of current group — prompt for next group
+		if (picksRemainingInGroup <= entryCount && currentRoundGroup < 3) return currentRoundGroup + 1;
+		return null;
+	});
+
+	// Whether the pending group already has a confirmed order saved
 	let nextGroupHasOrder = $derived(
-		nextGroup !== null &&
-		(data.draftOrders ?? []).filter((o) => o.round_group === nextGroup).length === entryCount
+		pendingOrderGroup !== null &&
+		(data.draftOrders ?? []).filter((o) => o.round_group === pendingOrderGroup).length === entryCount
 	);
 
-	// Show the next-group order panel when in the last round of the current group
-	// i.e. picksRemainingInGroup <= entryCount (last round of the group)
-	let showNextGroupPanel = $derived(
-		isLive && !draftComplete && nextGroup !== null && picksRemainingInGroup <= entryCount
-	);
+	let showNextGroupPanel = $derived(pendingOrderGroup !== null);
+
+	// Alias for template use
+	let nextGroup = $derived(pendingOrderGroup);
 
 	// Drag state for the next-group order panel (mirrors draftOrder for G1)
 	let nextGroupOrder = $state<string[]>([]);
@@ -71,7 +84,7 @@
 	let nextGroupDragOverIdx = $state(-1);
 	let nextGroupConfirmingOrder = $state(false);
 
-	// Initialise / sync nextGroupOrder when the panel becomes visible or nextGroup changes
+	// Initialise / sync nextGroupOrder when the panel becomes visible or pendingOrderGroup changes
 	$effect(() => {
 		if (!showNextGroupPanel || nextGroup === null) return;
 		const existing = (data.draftOrders ?? [])
@@ -81,7 +94,7 @@
 		if (existing.length === entryCount) {
 			nextGroupOrder = existing;
 		} else {
-			// Default to current G1 order or pool team list order
+			// Default to pool team list order (admin can drag to reorder)
 			nextGroupOrder = (data.poolTeams ?? []).map((t) => t.id);
 		}
 	});
@@ -656,7 +669,11 @@
 					<span class="rounded font-bold text-xs px-2 py-0.5 {badgeCls[nextGroup]}">G{nextGroup}</span>
 					<div>
 						<p class="font-bold text-sm {groupColors[nextGroup]}">Lottery Order (Group {nextGroup})</p>
-						<p class="text-xs text-muted-foreground">{picksRemainingInGroup} pick{picksRemainingInGroup === 1 ? '' : 's'} left in Group {currentRoundGroup} — set the order before it ends</p>
+						{#if nextGroup === currentRoundGroup}
+							<p class="text-xs text-destructive font-medium">⚠️ No order set for this group — set it to resume picks</p>
+						{:else}
+							<p class="text-xs text-muted-foreground">{picksRemainingInGroup} pick{picksRemainingInGroup === 1 ? '' : 's'} left in Group {currentRoundGroup} — set the order before it ends</p>
+						{/if}
 					</div>
 				</div>
 				<div class="flex items-center gap-2">
