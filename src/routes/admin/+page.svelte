@@ -99,6 +99,7 @@
 
 
 	let confirmingOrder = $state(false);
+	let startingDraft = $state(false);
 
 	// --- Pick modal (mobile-friendly team picker) ---
 	let pickModalOpen = $state(false);
@@ -673,11 +674,24 @@
 								Confirm the lottery order above to unlock Start Draft.
 							</p>
 						{/if}
-						<form method="POST" action="?/startDraft" use:enhance>
+						<form method="POST" action="?/startDraft" use:enhance={() => {
+								startingDraft = true;
+								return async ({ update }) => {
+									await update();
+									startingDraft = false;
+								};
+							}}>
 							<input type="hidden" name="settings_id" value={settings.id} />
 							<input type="hidden" name="timer_seconds" value={selectedTimer} />
 							<input type="hidden" name="ordered_team_ids" value={draftOrder.join(',')} />
-							<Button type="submit" class="w-full" disabled={!poolReady || !orderConfirmed}>Start Draft</Button>
+							<Button type="submit" class="w-full" disabled={!poolReady || !orderConfirmed || startingDraft}>
+								{#if startingDraft}
+									<LoaderCircle class="h-4 w-4 animate-spin mr-2" />
+									Starting…
+								{:else}
+									Start Draft
+								{/if}
+							</Button>
 						</form>
 						{#if form?.startError}
 							<p class="mt-2 text-xs text-destructive">{form.startError}</p>
