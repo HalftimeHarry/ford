@@ -641,7 +641,7 @@
 						{@const isOnClock = nextPickerTeam?.id === order.pool_team}
 						<span class="text-xs rounded px-1.5 py-0.5 shrink-0
 							{isOnClock ? 'bg-primary text-primary-foreground font-bold' : 'bg-muted text-muted-foreground'}">
-							{order.position}. {pt?.name?.split(' ')[0] ?? '?'}
+							{order.position}. {pt?.name ?? '?'}
 						</span>
 					{/each}
 				</div>
