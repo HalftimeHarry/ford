@@ -102,16 +102,16 @@
 						<div class="rounded-lg border-2 border-accent/30 bg-accent/5 p-5 text-center">
 							<div class="flex items-center justify-center gap-2">
 								<DollarSign class="h-6 w-6 text-accent" />
-								<p class="text-3xl font-extrabold text-accent">$1,200</p>
+								<p class="text-3xl font-extrabold text-accent">$5,000</p>
 							</div>
-							<p class="text-sm text-muted-foreground">per team + $50 entry fee</p>
+							<p class="text-sm text-muted-foreground">total prize pool · $500 entry fee per team</p>
 							<Separator class="my-3" />
 							<p class="text-sm font-medium">Pays 1st, 2nd &amp; 3rd Place</p>
 							<div class="mt-2 overflow-hidden rounded-lg border">
 								{#each [
-									{ place: '🥇 1st Place', amount: '$7,500' },
-									{ place: '🥈 2nd Place', amount: '$3,000' },
-									{ place: '🥉 3rd Place', amount: '$1,500' },
+									{ place: '🥇 1st Place', amount: '$3,000' },
+									{ place: '🥈 2nd Place', amount: '$1,500' },
+									{ place: '🥉 3rd Place', amount: '$500' },
 								] as row, i}
 									<div class="flex items-center justify-between px-4 py-2 text-sm {i % 2 === 0 ? 'bg-card' : 'bg-muted/50'}">
 										<span class="font-medium">{row.place}</span>
