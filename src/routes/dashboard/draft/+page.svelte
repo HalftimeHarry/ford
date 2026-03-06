@@ -70,10 +70,14 @@
 	let pickModalOpen = $state(false);
 	let pickModalSearch = $state('');
 	let pickModalPending = $state(false);
+	let pickModalRegion = $state('All');
+
+	const PICK_REGIONS = ['All', 'East', 'West', 'South', 'Midwest'] as const;
 
 	let pickModalTeams = $derived.by(() => {
 		const q = pickModalSearch.toLowerCase().trim();
-		const teams = availableTeams;
+		let teams = availableTeams;
+		if (pickModalRegion !== 'All') teams = teams.filter((t) => t.region === pickModalRegion);
 		if (!q) return teams;
 		return teams.filter(
 			(t) => t.name.toLowerCase().includes(q) || t.seed.toString() === q || t.region.toLowerCase().includes(q)
@@ -82,6 +86,7 @@
 
 	function openPickModal() {
 		pickModalSearch = '';
+		pickModalRegion = 'All';
 		pickModalOpen = true;
 	}
 
@@ -365,55 +370,85 @@
 
 <!-- Pick Team Modal (participant) -->
 {#if pickModalOpen && data.canPick}
+	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<div
-		class="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60"
+		class="fixed inset-0 z-50 flex items-end justify-center bg-black/60"
 		role="dialog"
 		aria-modal="true"
 		aria-label="Pick a team"
+		onclick={(e) => { if (e.target === e.currentTarget) pickModalOpen = false; }}
 	>
-		<div class="bg-card w-full sm:max-w-md sm:mx-4 sm:rounded-xl rounded-t-xl shadow-2xl flex flex-col max-h-[85vh]">
+		<div class="bg-card w-full rounded-t-2xl shadow-2xl flex flex-col"
+			style="max-height: 92dvh;">
+
+			<!-- Drag handle -->
+			<div class="flex justify-center pt-2.5 pb-1 shrink-0">
+				<div class="w-10 h-1 rounded-full bg-muted-foreground/30"></div>
+			</div>
+
 			<!-- Header -->
-			<div class="flex items-center justify-between px-4 py-3 border-b shrink-0">
+			<div class="flex items-center justify-between px-4 pb-2 shrink-0">
 				<div>
-					<p class="font-semibold">Pick a Team</p>
-					<p class="text-xs text-muted-foreground">Pick #{nextPickNumber} · Round {currentDraftRound}</p>
+					<p class="font-bold text-lg leading-tight">Your Pick</p>
+					<p class="text-sm text-muted-foreground">Pick #{nextPickNumber} · Round {currentDraftRound} · It's your turn!</p>
 				</div>
-				<button type="button" onclick={() => pickModalOpen = false} class="text-muted-foreground hover:text-foreground p-1 rounded">
-					<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+				<button type="button" onclick={() => pickModalOpen = false}
+					class="rounded-full bg-muted p-2 text-muted-foreground hover:text-foreground active:scale-95 transition-all">
+					<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
 						<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
 					</svg>
 				</button>
 			</div>
 
 			<!-- Search -->
-			<div class="px-4 py-2 border-b shrink-0">
+			<div class="px-4 pb-2 shrink-0">
 				<div class="relative">
-					<Search class="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+					<Search class="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
 					<input
-						type="text"
-						placeholder="Search by name, seed, or region…"
+						type="search"
+						placeholder="Search teams…"
 						bind:value={pickModalSearch}
-						autofocus
-						class="w-full rounded-md border border-input bg-background pl-8 pr-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+						class="w-full rounded-xl border border-input bg-muted/50 pl-9 pr-3 py-2.5 text-base focus:outline-none focus:ring-2 focus:ring-ring"
 					/>
 				</div>
 			</div>
 
-			<!-- Team list -->
-			<div class="overflow-y-auto flex-1 px-2 py-2 space-y-0.5">
-				{#each pickModalTeams as team (team.id)}
-					<button
-						type="button"
-						onclick={() => pickModalSelect(team.id)}
-						class="w-full flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-left hover:bg-primary/10 active:bg-primary/20 transition-colors"
-					>
-						<span class="w-6 text-right font-mono text-xs text-muted-foreground shrink-0">#{team.seed}</span>
-						<span class="flex-1 font-medium">{team.name}</span>
-						<span class="text-xs text-muted-foreground shrink-0">{team.region}</span>
-					</button>
+			<!-- Region tabs (hidden when searching) -->
+			{#if !pickModalSearch}
+				<div class="flex gap-1.5 px-4 pb-2 shrink-0 overflow-x-auto">
+					{#each PICK_REGIONS as r}
+						<button
+							type="button"
+							onclick={() => pickModalRegion = r}
+							class="shrink-0 rounded-full px-4 py-1.5 text-sm font-semibold transition-colors
+								{pickModalRegion === r
+									? 'bg-primary text-primary-foreground'
+									: 'bg-muted text-muted-foreground hover:bg-muted/80'}"
+						>{r}</button>
+					{/each}
+				</div>
+			{/if}
+
+			<!-- Team grid -->
+			<div class="overflow-y-auto flex-1 px-3 pb-6 pt-1">
+				{#if pickModalTeams.length === 0}
+					<p class="text-sm text-muted-foreground text-center py-12">No available teams{pickModalSearch ? ` matching "${pickModalSearch}"` : ' in this region'}.</p>
 				{:else}
-					<p class="text-sm text-muted-foreground text-center py-8">No teams match "{pickModalSearch}"</p>
-				{/each}
+					<div class="grid grid-cols-2 gap-2">
+						{#each pickModalTeams as team (team.id)}
+							<button
+								type="button"
+								onclick={() => pickModalSelect(team.id)}
+								class="flex flex-col items-start gap-0.5 rounded-xl border-2 border-transparent bg-muted/50 px-3 py-3
+									hover:border-primary hover:bg-primary/10 active:scale-95 active:bg-primary/20
+									transition-all text-left"
+							>
+								<span class="text-xs font-mono text-muted-foreground">#{team.seed} · {team.region.slice(0,1)}</span>
+								<span class="font-semibold text-sm leading-tight">{team.name}</span>
+							</button>
+						{/each}
+					</div>
+				{/if}
 			</div>
 		</div>
 	</div>
