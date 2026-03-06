@@ -71,6 +71,8 @@
 	let pickModalSearch = $state('');
 	let pickModalPending = $state(false);
 	let pickModalRegion = $state('All');
+	let pendingPickTeam = $state<{ id: string; name: string; seed: number; region: string } | null>(null);
+	let pickConfirmed = $state(false);
 
 	const PICK_REGIONS = ['All', 'East', 'West', 'South', 'Midwest'] as const;
 
@@ -87,15 +89,28 @@
 	function openPickModal() {
 		pickModalSearch = '';
 		pickModalRegion = 'All';
+		pendingPickTeam = null;
+		pickConfirmed = false;
 		pickModalOpen = true;
 	}
 
-	function pickModalSelect(teamId: string) {
+	function pickModalSelect(team: { id: string; name: string; seed: number; region: string }) {
 		if (pickModalPending) return;
-		pickModalOpen = false;
-		selectedTeam = teamId;
+		pendingPickTeam = team;
+	}
+
+	function confirmPick() {
+		if (!pendingPickTeam || pickModalPending) return;
+		pickModalPending = true;
+		selectedTeam = pendingPickTeam.id;
 		const frm = document.getElementById('user-pick-form') as HTMLFormElement;
 		if (frm) frm.requestSubmit();
+		// success state shown via form result — reset pending flag after short delay
+		setTimeout(() => {
+			pickConfirmed = true;
+			pickModalPending = false;
+			setTimeout(() => { pickModalOpen = false; pickConfirmed = false; pendingPickTeam = null; }, 1800);
+		}, 600);
 	}
 
 	let filteredTeams = $derived(() => {
@@ -400,56 +415,115 @@
 				</button>
 			</div>
 
-			<!-- Search -->
-			<div class="px-4 pb-2 shrink-0">
-				<div class="relative">
-					<Search class="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-					<input
-						type="search"
-						placeholder="Search teams…"
-						bind:value={pickModalSearch}
-						class="w-full rounded-xl border border-input bg-muted/50 pl-9 pr-3 py-2.5 text-base focus:outline-none focus:ring-2 focus:ring-ring"
-					/>
+			<!-- Search + region tabs: only shown on team grid step -->
+			{#if !pendingPickTeam && !pickConfirmed}
+				<div class="px-4 pb-2 shrink-0">
+					<div class="relative">
+						<Search class="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+						<input
+							type="search"
+							placeholder="Search teams…"
+							bind:value={pickModalSearch}
+							class="w-full rounded-xl border border-input bg-muted/50 pl-9 pr-3 py-2.5 text-base focus:outline-none focus:ring-2 focus:ring-ring"
+						/>
+					</div>
 				</div>
-			</div>
 
-			<!-- Region tabs (hidden when searching) -->
-			{#if !pickModalSearch}
-				<div class="flex gap-1.5 px-4 pb-2 shrink-0 overflow-x-auto">
-					{#each PICK_REGIONS as r}
-						<button
-							type="button"
-							onclick={() => pickModalRegion = r}
-							class="shrink-0 rounded-full px-4 py-1.5 text-sm font-semibold transition-colors
-								{pickModalRegion === r
-									? 'bg-primary text-primary-foreground'
-									: 'bg-muted text-muted-foreground hover:bg-muted/80'}"
-						>{r}</button>
-					{/each}
-				</div>
-			{/if}
-
-			<!-- Team grid -->
-			<div class="overflow-y-auto flex-1 px-3 pb-6 pt-1">
-				{#if pickModalTeams.length === 0}
-					<p class="text-sm text-muted-foreground text-center py-12">No available teams{pickModalSearch ? ` matching "${pickModalSearch}"` : ' in this region'}.</p>
-				{:else}
-					<div class="grid grid-cols-2 gap-2">
-						{#each pickModalTeams as team (team.id)}
+				{#if !pickModalSearch}
+					<div class="flex gap-1.5 px-4 pb-2 shrink-0 overflow-x-auto">
+						{#each PICK_REGIONS as r}
 							<button
 								type="button"
-								onclick={() => pickModalSelect(team.id)}
-								class="flex flex-col items-start gap-0.5 rounded-xl border-2 border-transparent bg-muted/50 px-3 py-3
-									hover:border-primary hover:bg-primary/10 active:scale-95 active:bg-primary/20
-									transition-all text-left"
-							>
-								<span class="text-xs font-mono text-muted-foreground">#{team.seed} · {team.region.slice(0,1)}</span>
-								<span class="font-semibold text-sm leading-tight">{team.name}</span>
-							</button>
+								onclick={() => pickModalRegion = r}
+								class="shrink-0 rounded-full px-4 py-1.5 text-sm font-semibold transition-colors
+									{pickModalRegion === r
+										? 'bg-primary text-primary-foreground'
+										: 'bg-muted text-muted-foreground hover:bg-muted/80'}"
+							>{r}</button>
 						{/each}
 					</div>
 				{/if}
-			</div>
+			{/if}
+
+			{#if pickConfirmed}
+				<!-- Success state -->
+				<div class="flex flex-col items-center justify-center flex-1 px-6 py-12 gap-4">
+					<div class="rounded-full bg-accent/20 p-5">
+						<svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+							<path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+						</svg>
+					</div>
+					<p class="text-xl font-bold text-accent">Pick Confirmed!</p>
+					{#if pendingPickTeam}
+						<p class="text-center text-muted-foreground">
+							<span class="font-semibold text-foreground">#{pendingPickTeam.seed} {pendingPickTeam.name}</span><br/>
+							{pendingPickTeam.region}
+						</p>
+					{/if}
+				</div>
+
+			{:else if pendingPickTeam}
+				<!-- Confirmation step -->
+				<div class="flex flex-col flex-1 px-4 pb-6 pt-2 gap-4">
+					<p class="text-sm text-muted-foreground text-center">Confirm your selection</p>
+
+					<div class="rounded-2xl border-2 border-primary bg-primary/5 px-5 py-6 text-center">
+						<p class="text-xs font-mono text-muted-foreground mb-1">#{pendingPickTeam.seed} · {pendingPickTeam.region}</p>
+						<p class="text-3xl font-bold text-primary leading-tight">{pendingPickTeam.name}</p>
+						<p class="text-sm text-muted-foreground mt-2">Pick #{nextPickNumber} · Round {currentDraftRound}</p>
+					</div>
+
+					<div class="flex gap-3 mt-auto">
+						<button
+							type="button"
+							onclick={() => pendingPickTeam = null}
+							disabled={pickModalPending}
+							class="flex-1 rounded-xl border-2 border-muted bg-muted/50 py-3.5 font-semibold text-muted-foreground
+								hover:bg-muted active:scale-95 transition-all disabled:opacity-40"
+						>
+							← Go Back
+						</button>
+						<button
+							type="button"
+							onclick={confirmPick}
+							disabled={pickModalPending}
+							class="flex-1 rounded-xl bg-primary py-3.5 font-bold text-primary-foreground
+								hover:bg-primary/90 active:scale-95 transition-all disabled:opacity-60
+								flex items-center justify-center gap-2"
+						>
+							{#if pickModalPending}
+								<LoaderCircle class="h-4 w-4 animate-spin" />
+								Submitting…
+							{:else}
+								Confirm Pick ✓
+							{/if}
+						</button>
+					</div>
+				</div>
+
+			{:else}
+				<!-- Team grid -->
+				<div class="overflow-y-auto flex-1 px-3 pb-6 pt-1">
+					{#if pickModalTeams.length === 0}
+						<p class="text-sm text-muted-foreground text-center py-12">No available teams{pickModalSearch ? ` matching "${pickModalSearch}"` : ' in this region'}.</p>
+					{:else}
+						<div class="grid grid-cols-2 gap-2">
+							{#each pickModalTeams as team (team.id)}
+								<button
+									type="button"
+									onclick={() => pickModalSelect(team)}
+									class="flex flex-col items-start gap-0.5 rounded-xl border-2 border-transparent bg-muted/50 px-3 py-3
+										hover:border-primary hover:bg-primary/10 active:scale-95 active:bg-primary/20
+										transition-all text-left"
+								>
+									<span class="text-xs font-mono text-muted-foreground">#{team.seed} · {team.region.slice(0,1)}</span>
+									<span class="font-semibold text-sm leading-tight">{team.name}</span>
+								</button>
+							{/each}
+						</div>
+					{/if}
+				</div>
+			{/if}
 		</div>
 	</div>
 {/if}
