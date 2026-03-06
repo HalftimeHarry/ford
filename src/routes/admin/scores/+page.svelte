@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { enhance } from '$app/forms';
+	import { enhance, deserialize } from '$app/forms';
 	import { invalidateAll } from '$app/navigation';
 	import { Button } from '$lib/components/ui/button';
 	import * as Card from '$lib/components/ui/card';
@@ -90,21 +90,19 @@
 
 		try {
 			const res = await fetch('?/bulkRecord', { method: 'POST', body: fd, headers: { 'x-sveltekit-action': 'true' } });
-			const json = await res.json();
-			const payload = json?.data ?? json;
+			const rawText = await res.text();
+			// SvelteKit uses devalue serialization — must use deserialize() not JSON.parse()
+			const result = deserialize(rawText) as { type: string; data?: Record<string, unknown> };
 
 			if (progressInterval) { clearInterval(progressInterval); progressInterval = null; }
 			submitProgress = 100;
 
-			if (json?.type === 'success' && payload?.bulkSuccess) {
-				// Mark round complete locally immediately (before invalidateAll)
+			if (result.type === 'success' && result.data?.bulkSuccess) {
 				completedRounds = new Set([...completedRounds, round]);
-				// Reload data in background
 				await invalidateAll();
-				submitSuccess = payload.bulkSuccess;
+				submitSuccess = result.data.bulkSuccess as string;
 				submitting = false;
 				submitProgress = 0;
-				// Advance to next round
 				const next = nextRound(round);
 				if (next) {
 					selectedRound = next;
@@ -113,12 +111,11 @@
 			} else {
 				submitting = false;
 				submitProgress = 0;
-				submitError = payload?.bulkError ?? 'Failed to record results';
+				submitError = (result.data?.bulkError as string) ?? 'Failed to record results';
 			}
 		} catch (e) {
 			if (progressInterval) { clearInterval(progressInterval); progressInterval = null; }
-			submitting = false;
-			submitProgress = 0;
+			submitting = false; submitProgress = 0;
 			submitError = e instanceof Error ? e.message : 'Request failed';
 		}
 	}
@@ -176,14 +173,13 @@
 		fd.set('replacement_result_id', replacementResult.id);
 		try {
 			const res = await fetch('?/swapPair', { method: 'POST', body: fd, headers: { 'x-sveltekit-action': 'true' } });
-			const json = await res.json();
-			const payload = json?.data ?? json;
-			if (json?.type === 'success') {
+			const result = deserialize(await res.text()) as { type: string; data?: Record<string, unknown> };
+			if (result.type === 'success') {
 				swapMessage = 'Swap applied successfully.';
 				await invalidateAll();
 				setTimeout(closeModal, 1200);
 			} else {
-				swapError = payload?.swapError ?? 'Swap failed — please try again';
+				swapError = (result.data?.swapError as string) ?? 'Swap failed — please try again';
 			}
 		} catch (e) {
 			swapError = e instanceof Error ? e.message : 'Request failed';

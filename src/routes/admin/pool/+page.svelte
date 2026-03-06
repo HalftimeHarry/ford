@@ -17,9 +17,16 @@
 <svelte:head><title>Admin — Pool</title></svelte:head>
 
 <div class="mx-auto max-w-xl space-y-6">
-	<h1 class="flex items-center gap-3 text-3xl font-bold text-primary">
-		<Users class="h-7 w-7" /> Pool Admin
-	</h1>
+	<div>
+		<h1 class="flex items-center gap-3 text-3xl font-bold text-primary">
+			<Users class="h-7 w-7" /> Pool Admin
+		</h1>
+		<p class="mt-2 text-sm text-muted-foreground max-w-xl">
+			Manage participant access to the pool. When someone requests to join a team, their request
+			appears here as pending. Approve to grant them access to the draft and scoring pages;
+			reject to deny entry. All approved members appear in the leaderboard under their team name.
+		</p>
+	</div>
 
 	<Card.Card>
 		<Card.CardHeader>
