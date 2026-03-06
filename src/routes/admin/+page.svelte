@@ -146,8 +146,14 @@
 
 	let filteredTeams = $derived(() => {
 		const q = teamSearch.toLowerCase().trim();
-		if (!q) return data.teams;
-		return data.teams.filter(
+		let teams = data.teams;
+		if (seedFilter !== null) {
+			const group = SEED_GROUPS.find((g) => g.min === seedFilter);
+			if (group) teams = teams.filter((t) => t.seed >= group.min && t.seed <= group.max);
+		}
+		if (regionFilter !== null) teams = teams.filter((t) => t.region === regionFilter);
+		if (!q) return teams;
+		return teams.filter(
 			(t) => t.name.toLowerCase().includes(q) || t.seed.toString() === q || t.region.toLowerCase().includes(q)
 		);
 	});
@@ -200,6 +206,7 @@
 	onMount(() => {
 		updateTimer();
 		timerInterval = setInterval(updateTimer, 1000);
+		refreshQuickPick();
 	});
 
 	onDestroy(() => {
@@ -265,13 +272,26 @@
 	let autoPickPending = $state(false);
 	let autoPickError = $state('');
 
-	// Best available team suggestion (lowest seed among available, random tiebreak within same seed)
-	let recommendedTeam = $derived.by(() => {
-		if (availableTeams.length === 0) return null;
-		const minSeed = Math.min(...availableTeams.map((t) => t.seed));
-		const topSeeds = availableTeams.filter((t) => t.seed === minSeed);
-		return topSeeds[Math.floor(Math.random() * topSeeds.length)];
-	});
+	// Quick Pick — a random available team, refreshed on demand
+	let quickPickTeam = $state<typeof availableTeams[0] | null>(null);
+
+	function refreshQuickPick() {
+		if (availableTeams.length === 0) { quickPickTeam = null; return; }
+		const idx = Math.floor(Math.random() * availableTeams.length);
+		quickPickTeam = availableTeams[idx];
+	}
+
+	// Seed rank filter for Available Teams (null = all)
+	let seedFilter = $state<number | null>(null);
+	// Region filter for Available Teams (null = all)
+	let regionFilter = $state<string | null>(null);
+
+	const SEED_GROUPS = [
+		{ label: '1–4', min: 1, max: 4 },
+		{ label: '5–8', min: 5, max: 8 },
+		{ label: '9–12', min: 9, max: 12 },
+		{ label: '13–16', min: 13, max: 16 }
+	] as const;
 
 	async function submitPick(poolTeamId: string, ncaaTeamId: string, draftRound: number, pickNumber: number) {
 		pickPending = true;
@@ -724,8 +744,8 @@
 		<!-- Column 2 (or full-width left when live): Available Teams -->
 		<div>
 			<Card.Card>
-				<Card.CardHeader class="pb-3">
-					<div class="flex items-center justify-between gap-4">
+				<Card.CardHeader class="pb-2">
+					<div class="flex items-center justify-between gap-3 flex-wrap">
 						<Card.CardTitle class="{isLive ? 'text-xl' : ''}">
 							Available ({availableTeams.length})
 						</Card.CardTitle>
@@ -733,21 +753,52 @@
 							type="text"
 							placeholder="Search teams..."
 							bind:value={teamSearch}
-							class="flex h-8 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring {isLive ? 'w-72' : 'w-64'}"
+							class="flex h-8 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring {isLive ? 'w-56' : 'w-48'}"
 						/>
+					</div>
+					<!-- Filter badges: seed groups + regions -->
+					<div class="flex flex-wrap gap-1.5 pt-2">
+						{#each SEED_GROUPS as g}
+							<button
+								type="button"
+								onclick={() => seedFilter = seedFilter === g.min ? null : g.min}
+								class="rounded-full px-2.5 py-0.5 text-xs font-semibold border transition-colors
+									{seedFilter === g.min
+										? 'bg-primary text-primary-foreground border-primary'
+										: 'bg-muted/60 text-muted-foreground border-transparent hover:border-primary/40 hover:text-foreground'}"
+							>#{g.label}</button>
+						{/each}
+						<span class="w-px bg-border mx-0.5 self-stretch"></span>
+						{#each REGIONS as r}
+							<button
+								type="button"
+								onclick={() => regionFilter = regionFilter === r ? null : r}
+								class="rounded-full px-2.5 py-0.5 text-xs font-semibold border transition-colors
+									{regionFilter === r
+										? 'bg-accent text-accent-foreground border-accent'
+										: 'bg-muted/60 text-muted-foreground border-transparent hover:border-accent/40 hover:text-foreground'}"
+							>{r.slice(0,1)}</button>
+						{/each}
+						{#if seedFilter !== null || regionFilter !== null}
+							<button
+								type="button"
+								onclick={() => { seedFilter = null; regionFilter = null; }}
+								class="rounded-full px-2.5 py-0.5 text-xs font-semibold text-destructive hover:bg-destructive/10 transition-colors"
+							>✕ Clear</button>
+						{/if}
 					</div>
 				</Card.CardHeader>
 				<Card.CardContent>
 					<div class="grid grid-cols-2 gap-4 xl:grid-cols-4">
 						{#each REGIONS as region}
 							{@const regionTeams = filteredTeams().filter((t) => t.region === region)}
-							{#if regionTeams.length > 0 || !teamSearch}
+							{#if regionTeams.length > 0}
 								<div>
 									<p class="mb-2 font-bold uppercase tracking-widest text-primary border-b border-primary/20 pb-1 {isLive ? 'text-sm' : 'text-xs'}">
 										{region}
 									</p>
 									<div class="{isLive ? 'space-y-1' : 'space-y-0.5'}">
-										{#each (teamSearch ? regionTeams : data.teams.filter((t) => t.region === region)) as team}
+										{#each regionTeams as team}
 											{@const drafted = draftedTeamIds.has(team.id)}
 											<!-- svelte-ignore a11y_no_static_element_interactions -->
 											<div
@@ -763,7 +814,12 @@
 												ondragend={() => (draggedTeamId = '')}
 												role={drafted ? undefined : 'listitem'}
 											>
-												<span class="text-right font-mono text-muted-foreground shrink-0 {isLive ? 'w-6 text-sm' : 'w-5 text-xs'}">{team.seed}</span>
+												<span class="shrink-0 rounded font-mono text-xs font-bold px-1 py-0.5
+													{drafted ? 'text-muted-foreground' :
+													 team.seed <= 4 ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400' :
+													 team.seed <= 8 ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400' :
+													 team.seed <= 12 ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-400' :
+													 'bg-muted text-muted-foreground'}">{team.seed}</span>
 												<span class="flex-1 truncate">{team.name}</span>
 												{#if !drafted && isLive}
 													<!-- Drag handle: hidden on small screens -->
@@ -872,19 +928,31 @@
 						{/if}
 					</div>
 
-					<!-- Recommended team suggestion -->
-					{#if recommendedTeam}
-						<div class="mx-4 mb-3 rounded-lg border border-dashed border-primary/40 bg-muted/30 px-3 py-2.5">
-							<p class="text-xs uppercase tracking-wider text-muted-foreground font-medium mb-1">Suggested Pick</p>
-							<div class="flex items-center gap-2">
-								<span class="font-mono text-sm font-bold text-primary">#{recommendedTeam.seed}</span>
-								<span class="font-semibold flex-1">{recommendedTeam.name}</span>
-								<span class="text-xs text-muted-foreground">{recommendedTeam.region}</span>
+					<!-- Quick Pick suggestion -->
+					<div class="mx-4 mb-3">
+						{#if quickPickTeam}
+							<div class="rounded-lg border border-dashed border-primary/40 bg-muted/30 px-3 py-2.5">
+								<div class="flex items-center justify-between mb-1">
+									<p class="text-xs uppercase tracking-wider text-muted-foreground font-medium">Quick Pick</p>
+									<button type="button" onclick={refreshQuickPick}
+										class="text-xs text-muted-foreground hover:text-foreground transition-colors px-1"
+										title="Shuffle">↺ shuffle</button>
+								</div>
+								<div class="flex items-center gap-2">
+									<span class="rounded bg-primary/10 text-primary font-mono text-xs font-bold px-1.5 py-0.5">#{quickPickTeam.seed}</span>
+									<span class="font-semibold flex-1 text-sm">{quickPickTeam.name}</span>
+									<span class="rounded bg-muted text-muted-foreground text-xs px-1.5 py-0.5">{quickPickTeam.region.slice(0,1)}</span>
+								</div>
 							</div>
-						</div>
-					{/if}
+						{:else}
+							<button type="button" onclick={refreshQuickPick}
+								class="w-full rounded-lg border border-dashed border-primary/30 py-2 text-xs text-muted-foreground hover:text-foreground hover:border-primary/60 transition-colors">
+								↺ Get a random pick suggestion
+							</button>
+						{/if}
+					</div>
 
-					<!-- Auto-pick buttons -->
+					<!-- Quick Pick / Auto-pick buttons -->
 					<div class="px-4 pb-4 flex flex-col gap-2">
 						{#if timerExpired}
 							<form method="POST" action="?/autoPick" use:enhance={() => {
@@ -892,7 +960,7 @@
 									return async ({ result, update }) => {
 										await update();
 										autoPickPending = false;
-										if (result.type === 'failure') autoPickError = (result.data as Record<string,string>)?.pickError ?? 'Auto-pick failed';
+										if (result.type === 'failure') autoPickError = (result.data as Record<string,string>)?.pickError ?? 'Quick pick failed';
 										else setTimeout(() => location.reload(), 600);
 									};
 								}}>
@@ -900,7 +968,7 @@
 									{#if autoPickPending}
 										<LoaderCircle class="h-4 w-4 animate-spin mr-2" />Picking…
 									{:else}
-										Auto-Pick (Time Expired)
+										Quick Pick (Time Expired)
 									{/if}
 								</Button>
 							</form>
@@ -910,7 +978,7 @@
 								return async ({ result, update }) => {
 									await update();
 									autoPickPending = false;
-									if (result.type === 'failure') autoPickError = (result.data as Record<string,string>)?.pickError ?? 'Auto-pick failed';
+									if (result.type === 'failure') autoPickError = (result.data as Record<string,string>)?.pickError ?? 'Quick pick failed';
 									else setTimeout(() => location.reload(), 600);
 								};
 							}}>
@@ -918,7 +986,7 @@
 								{#if autoPickPending}
 									<LoaderCircle class="h-4 w-4 animate-spin mr-2" />Picking…
 								{:else}
-									Auto-Pick Best Available
+									Quick Pick Random
 								{/if}
 							</Button>
 						</form>
