@@ -262,6 +262,16 @@
 	let pickPending = $state(false);
 	let pickError = $state('');
 	let pickSuccess = $state(false);
+	let autoPickPending = $state(false);
+	let autoPickError = $state('');
+
+	// Best available team suggestion (lowest seed among available, random tiebreak within same seed)
+	let recommendedTeam = $derived.by(() => {
+		if (availableTeams.length === 0) return null;
+		const minSeed = Math.min(...availableTeams.map((t) => t.seed));
+		const topSeeds = availableTeams.filter((t) => t.seed === minSeed);
+		return topSeeds[Math.floor(Math.random() * topSeeds.length)];
+	});
 
 	async function submitPick(poolTeamId: string, ncaaTeamId: string, draftRound: number, pickNumber: number) {
 		pickPending = true;
@@ -862,15 +872,55 @@
 						{/if}
 					</div>
 
+					<!-- Recommended team suggestion -->
+					{#if recommendedTeam}
+						<div class="mx-4 mb-3 rounded-lg border border-dashed border-primary/40 bg-muted/30 px-3 py-2.5">
+							<p class="text-xs uppercase tracking-wider text-muted-foreground font-medium mb-1">Suggested Pick</p>
+							<div class="flex items-center gap-2">
+								<span class="font-mono text-sm font-bold text-primary">#{recommendedTeam.seed}</span>
+								<span class="font-semibold flex-1">{recommendedTeam.name}</span>
+								<span class="text-xs text-muted-foreground">{recommendedTeam.region}</span>
+							</div>
+						</div>
+					{/if}
+
 					<!-- Auto-pick buttons -->
 					<div class="px-4 pb-4 flex flex-col gap-2">
 						{#if timerExpired}
-							<form method="POST" action="?/autoPick" use:enhance>
-								<Button variant="destructive" class="w-full">Auto-Pick (Time Expired)</Button>
+							<form method="POST" action="?/autoPick" use:enhance={() => {
+									autoPickPending = true; autoPickError = '';
+									return async ({ result, update }) => {
+										await update();
+										autoPickPending = false;
+										if (result.type === 'failure') autoPickError = (result.data as Record<string,string>)?.pickError ?? 'Auto-pick failed';
+										else setTimeout(() => location.reload(), 600);
+									};
+								}}>
+								<Button variant="destructive" class="w-full" disabled={autoPickPending}>
+									{#if autoPickPending}
+										<LoaderCircle class="h-4 w-4 animate-spin mr-2" />Picking…
+									{:else}
+										Auto-Pick (Time Expired)
+									{/if}
+								</Button>
 							</form>
 						{/if}
-						<form method="POST" action="?/autoPick" use:enhance>
-							<Button variant="outline" class="w-full">Auto-Pick Best Available</Button>
+						<form method="POST" action="?/autoPick" use:enhance={() => {
+								autoPickPending = true; autoPickError = '';
+								return async ({ result, update }) => {
+									await update();
+									autoPickPending = false;
+									if (result.type === 'failure') autoPickError = (result.data as Record<string,string>)?.pickError ?? 'Auto-pick failed';
+									else setTimeout(() => location.reload(), 600);
+								};
+							}}>
+							<Button variant="outline" class="w-full" disabled={autoPickPending}>
+								{#if autoPickPending}
+									<LoaderCircle class="h-4 w-4 animate-spin mr-2" />Picking…
+								{:else}
+									Auto-Pick Best Available
+								{/if}
+							</Button>
 						</form>
 					</div>
 
@@ -880,6 +930,9 @@
 						<p class="px-4 pb-3 text-sm text-destructive text-center">{pickError}</p>
 					{:else if pickSuccess}
 						<p class="px-4 pb-3 text-sm text-accent text-center">Pick confirmed!</p>
+					{/if}
+					{#if autoPickError}
+						<p class="px-4 pb-3 text-sm text-destructive text-center">{autoPickError}</p>
 					{/if}
 				</div>
 

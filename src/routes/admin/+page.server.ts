@@ -226,7 +226,7 @@ export const actions: Actions = {
 
 			const groupOrders = allOrders.filter((o) => o.round_group === roundGroup);
 			const order = groupOrders.find((o) => o.position === positionIndex + 1);
-			if (!order) return fail(400, { pickError: 'No draft order set for this round group' });
+			if (!order) return fail(400, { pickError: 'No draft order set for this round group. Confirm the lottery order first.' });
 
 			// Resolve a user for this pool team
 			const requests = await adminPb.collection('join_requests').getFullList<JoinRequest>({
@@ -237,6 +237,8 @@ export const actions: Actions = {
 			await adminPb.collection('draft_picks').create({
 				user: requests[0].user,
 				team: bestTeam.id,
+				pool_team: order.pool_team,
+				round_group: roundGroup,
 				draft_round: draftRound,
 				pick_number: nextPickNumber
 			});
