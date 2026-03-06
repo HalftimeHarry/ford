@@ -7,11 +7,26 @@
 	import Zap from '@lucide/svelte/icons/zap';
 	import Trash2 from '@lucide/svelte/icons/trash-2';
 	import CircleAlert from '@lucide/svelte/icons/circle-alert';
+	import LoaderCircle from '@lucide/svelte/icons/loader-circle';
 
 	let { data, form } = $props();
 
 	let seedPending = $state(false);
 	let resetPending = $state(false);
+	let seedGroupPending = $state<number | null>(null);
+
+	const groupBadge = [
+		'',
+		'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400',
+		'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-400',
+		'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-400'
+	];
+	const groupBorder = [
+		'',
+		'border-blue-200 dark:border-blue-800',
+		'border-purple-200 dark:border-purple-800',
+		'border-orange-200 dark:border-orange-800'
+	];
 </script>
 
 <svelte:head><title>Admin — Tools</title></svelte:head>
@@ -21,9 +36,10 @@
 		<Wrench class="h-7 w-7" /> Testing Tools
 	</h1>
 	<p class="text-sm text-muted-foreground">
-		These tools exist for testing only. Use <strong>Seed Draft</strong> to simulate a completed
-		draft, then manually run eliminations on the Scores page. Use <strong>Reset All</strong> to
-		wipe test data before going live.
+		Use <strong>Seed Group</strong> buttons to simulate the draft one group at a time — this lets
+		you test the Group 2/3 order panels and scoring as the draft progresses. Use
+		<strong>Seed Draft</strong> to jump straight to a completed draft. Use
+		<strong>Reset All</strong> to wipe test data before going live.
 	</p>
 
 	<!-- Workflow -->
@@ -34,10 +50,14 @@
 		<Card.CardContent>
 			<ol class="space-y-2 text-sm text-muted-foreground list-none">
 				{#each [
-					{ step: '1', href: '/admin/tools', label: 'Tools', action: 'Seed Draft', desc: '60 picks created across all 10 teams' },
-					{ step: '2', href: '/admin/scores', label: 'Scores', action: 'Record eliminations', desc: 'Run each round manually, marking losers in bulk' },
-					{ step: '3', href: '/leaderboard', label: 'Leaderboard', action: 'Verify scoring', desc: 'Confirm points are calculating correctly' },
-					{ step: '4', href: '/admin/tools', label: 'Tools', action: 'Reset All', desc: 'Clean slate — ready to go live' },
+					{ step: '1', href: '/admin/tools', label: 'Tools', action: 'Seed Group 1', desc: 'Simulates picks 1–20, sets draft to in_progress' },
+					{ step: '2', href: '/admin', label: 'Draft', action: 'Set Group 2 order', desc: 'The order panel appears in the last round of G1' },
+					{ step: '3', href: '/admin/tools', label: 'Tools', action: 'Seed Group 2', desc: 'Simulates picks 21–40' },
+					{ step: '4', href: '/admin', label: 'Draft', action: 'Set Group 3 order', desc: 'Same panel appears in the last round of G2' },
+					{ step: '5', href: '/admin/tools', label: 'Tools', action: 'Seed Group 3', desc: 'Simulates picks 41–60, sets draft to complete' },
+					{ step: '6', href: '/admin/scores', label: 'Scores', action: 'Record eliminations', desc: 'Run each round manually' },
+					{ step: '7', href: '/leaderboard', label: 'Leaderboard', action: 'Verify scoring', desc: 'Confirm points are calculating correctly' },
+					{ step: '8', href: '/admin/tools', label: 'Tools', action: 'Reset All', desc: 'Clean slate — ready to go live' },
 				] as item}
 					<li class="flex items-start gap-3">
 						<span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">{item.step}</span>
@@ -55,24 +75,88 @@
 
 	<Separator />
 
-	<!-- Seed Draft -->
+	<!-- Seed by Group -->
+	<div class="space-y-3">
+		<div>
+			<h2 class="text-base font-semibold flex items-center gap-2">
+				<Zap class="h-4 w-4 text-primary" /> Seed by Group
+			</h2>
+			<p class="text-sm text-muted-foreground mt-0.5">
+				Simulate one group at a time to test the full draft flow including the Group 2/3 order panels.
+			</p>
+		</div>
+
+		<div class="grid gap-3 sm:grid-cols-3">
+			{#each data.groupStatus as gs}
+				<Card.Card class="border-2 {groupBorder[gs.group]}">
+					<Card.CardContent class="pt-4 pb-4 space-y-3">
+						<div class="flex items-center justify-between">
+							<span class="rounded font-bold text-xs px-2 py-0.5 {groupBadge[gs.group]}">G{gs.group}</span>
+							{#if gs.complete}
+								<span class="text-xs text-accent font-medium">✅ Done</span>
+							{:else if gs.pickCount > 0}
+								<span class="text-xs text-amber-600">{gs.pickCount}/{gs.total} picks</span>
+							{:else}
+								<span class="text-xs text-muted-foreground">0/{gs.total} picks</span>
+							{/if}
+						</div>
+
+						<div class="text-xs text-muted-foreground space-y-0.5">
+							<p>Rounds {gs.group * 2 - 1}–{gs.group * 2}</p>
+							<p>Picks {(gs.group - 1) * gs.total + 1}–{gs.group * gs.total}</p>
+							<p>Order: {gs.hasOrder ? '✅ set' : '⚠️ will auto-generate'}</p>
+						</div>
+
+						<form method="POST" action="?/seedGroup" use:enhance={() => {
+							seedGroupPending = gs.group;
+							return async ({ update }) => {
+								await update();
+								seedGroupPending = null;
+							};
+						}}>
+							<input type="hidden" name="group" value={gs.group} />
+							<Button
+								type="submit"
+								size="sm"
+								class="w-full"
+								variant={gs.complete ? 'outline' : 'default'}
+								disabled={seedGroupPending !== null || gs.complete}
+							>
+								{#if seedGroupPending === gs.group}
+									<LoaderCircle class="h-3.5 w-3.5 animate-spin mr-1.5" />Seeding…
+								{:else if gs.complete}
+									Already seeded
+								{:else}
+									Seed Group {gs.group}
+								{/if}
+							</Button>
+						</form>
+					</Card.CardContent>
+				</Card.Card>
+			{/each}
+		</div>
+
+		{#if form?.seedGroupSuccess}
+			<p class="text-sm text-accent">{form.seedGroupSuccess}</p>
+		{/if}
+		{#if form?.seedGroupError}
+			<p class="text-sm text-destructive">{form.seedGroupError}</p>
+		{/if}
+	</div>
+
+	<Separator />
+
+	<!-- Seed Draft (full) -->
 	<Card.Card class="border-primary/30">
 		<Card.CardHeader>
 			<Card.CardTitle class="flex items-center gap-2">
-				<Zap class="h-5 w-5 text-primary" /> Seed Draft
+				<Zap class="h-5 w-5 text-primary" /> Seed Draft (Full)
 			</Card.CardTitle>
-			<Card.CardDescription class="space-y-1">
-				<p>Simulates a complete draft across all 10 pool teams.</p>
+			<Card.CardDescription>
+				Simulates all 60 picks at once and sets draft to complete. Use this to skip straight to scoring tests.
 			</Card.CardDescription>
 		</Card.CardHeader>
 		<Card.CardContent class="space-y-4">
-			<ul class="space-y-1.5 text-sm text-muted-foreground">
-				<li class="flex items-start gap-2"><span class="mt-0.5 text-primary shrink-0">•</span>Generates a random snake order for all 3 round groups</li>
-				<li class="flex items-start gap-2"><span class="mt-0.5 text-primary shrink-0">•</span>Simulates all 60 picks using best-available by seed in proper snake order</li>
-				<li class="flex items-start gap-2"><span class="mt-0.5 text-primary shrink-0">•</span>Writes picks in batches of 10 to stay within rate limits</li>
-				<li class="flex items-start gap-2"><span class="mt-0.5 text-primary shrink-0">•</span>Sets <code class="text-xs bg-muted px-1 py-0.5 rounded">draft_settings.status = complete</code></li>
-				<li class="flex items-start gap-2"><span class="mt-0.5 text-primary shrink-0">•</span>Disabled if 60 picks already exist — reset first for a fresh run</li>
-			</ul>
 			<div class="rounded-md bg-muted/40 px-4 py-3 text-sm space-y-1">
 				<p><strong>Pool teams:</strong> {data.poolTeams.length}</p>
 				<p><strong>Existing picks:</strong> {data.pickCount}</p>
@@ -89,7 +173,13 @@
 				return async ({ update }) => { await update(); seedPending = false; };
 			}}>
 				<Button type="submit" disabled={seedPending || data.pickCount >= 60} class="w-full">
-					{seedPending ? 'Seeding…' : data.pickCount >= 60 ? 'Draft already complete' : 'Seed Draft (60 picks)'}
+					{#if seedPending}
+						<LoaderCircle class="h-4 w-4 animate-spin mr-2" />Seeding…
+					{:else if data.pickCount >= 60}
+						Draft already complete
+					{:else}
+						Seed Draft (60 picks)
+					{/if}
 				</Button>
 			</form>
 			{#if form?.seedSuccess}
@@ -110,17 +200,9 @@
 			<Card.CardDescription>
 				Wipes all picks, game results, draft orders, and resets draft status to
 				<code>not_started</code>. Also clears <code>eliminated_round</code> on all NCAA teams.
-				Run this before going live to ensure a clean slate.
 			</Card.CardDescription>
 		</Card.CardHeader>
 		<Card.CardContent class="space-y-4">
-			<ul class="space-y-1.5 text-sm text-muted-foreground">
-				<li class="flex items-start gap-2"><span class="mt-0.5 text-destructive shrink-0">•</span>Requires a confirmation prompt before running</li>
-				<li class="flex items-start gap-2"><span class="mt-0.5 text-destructive shrink-0">•</span>Deletes all <code class="text-xs bg-muted px-1 py-0.5 rounded">draft_picks</code>, <code class="text-xs bg-muted px-1 py-0.5 rounded">game_results</code>, and <code class="text-xs bg-muted px-1 py-0.5 rounded">draft_orders</code></li>
-				<li class="flex items-start gap-2"><span class="mt-0.5 text-destructive shrink-0">•</span>Clears <code class="text-xs bg-muted px-1 py-0.5 rounded">eliminated_round</code> on every NCAA team</li>
-				<li class="flex items-start gap-2"><span class="mt-0.5 text-destructive shrink-0">•</span>Resets <code class="text-xs bg-muted px-1 py-0.5 rounded">draft_settings.status = not_started</code></li>
-				<li class="flex items-start gap-2"><span class="mt-0.5 text-destructive shrink-0">•</span>Reports exactly what was deleted in the success message</li>
-			</ul>
 			<div class="rounded-md bg-destructive/5 border border-destructive/20 px-4 py-3 text-sm space-y-1">
 				<p><strong>Picks to delete:</strong> {data.pickCount}</p>
 				<p><strong>Game results to delete:</strong> {data.resultCount}</p>
@@ -129,13 +211,17 @@
 			</div>
 			<form method="POST" action="?/resetAll" use:enhance={() => {
 				if (!confirm('This will permanently delete all picks, results, and draft orders. Continue?')) {
-					return ({ cancel }) => cancel();
+					return ({ cancel }: { cancel: () => void }) => cancel();
 				}
 				resetPending = true;
-				return async ({ update }) => { await update(); resetPending = false; };
+				return async ({ update }: { update: () => Promise<void> }) => { await update(); resetPending = false; };
 			}}>
 				<Button type="submit" variant="destructive" disabled={resetPending} class="w-full">
-					{resetPending ? 'Resetting…' : 'Reset All Data'}
+					{#if resetPending}
+						<LoaderCircle class="h-4 w-4 animate-spin mr-2" />Resetting…
+					{:else}
+						Reset All Data
+					{/if}
 				</Button>
 			</form>
 			{#if form?.resetSuccess}
