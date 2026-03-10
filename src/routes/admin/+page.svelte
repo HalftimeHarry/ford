@@ -264,13 +264,19 @@
 		dropHover = false;
 	}
 
-	async function handleDrop(e: DragEvent) {
+	function handleDrop(e: DragEvent) {
 		e.preventDefault();
 		dropHover = false;
 		const teamId = e.dataTransfer!.getData('text/plain');
 		if (!teamId || draftedTeamIds.has(teamId) || !nextPickerTeam) { draggedTeamId = ''; return; }
 		draggedTeamId = '';
-		await submitPick(nextPickerTeam.id, teamId, currentDraftRound, nextPickNumber);
+		// Route through confirmation modal instead of submitting directly
+		const team = data.teams.find((t) => t.id === teamId);
+		if (!team) return;
+		pendingPickTeam = { id: team.id, name: team.name, seed: team.seed, region: team.region };
+		pickModalSearch = '';
+		pickConfirmed = false;
+		pickModalOpen = true;
 	}
 
 	// --- Timer ---
@@ -1233,30 +1239,30 @@
 {#if pickModalOpen}
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<div
-		class="fixed inset-0 z-50 flex items-end justify-center bg-black/60"
+		class="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60"
 		role="dialog"
 		aria-modal="true"
 		aria-label="Pick a team"
 		onclick={(e) => { if (e.target === e.currentTarget) pickModalOpen = false; }}
 	>
-		<div class="bg-card w-full rounded-t-2xl shadow-2xl flex flex-col"
-			style="max-height: 92dvh;">
+		<div class="bg-card w-full rounded-t-2xl sm:rounded-2xl sm:max-w-sm sm:mb-8 shadow-2xl flex flex-col"
+			style="max-height: 85dvh;">
 
-			<!-- Drag handle -->
-			<div class="flex justify-center pt-2.5 pb-1 shrink-0">
+			<!-- Drag handle (mobile only) -->
+			<div class="flex justify-center pt-2.5 pb-1 shrink-0 sm:hidden">
 				<div class="w-10 h-1 rounded-full bg-muted-foreground/30"></div>
 			</div>
 
 			<!-- Header -->
-			<div class="flex items-center justify-between px-4 pb-2 shrink-0">
+			<div class="flex items-center justify-between px-4 pt-4 pb-2 shrink-0">
 				<div>
-					<p class="font-bold text-lg leading-tight">Pick a Team</p>
+					<p class="font-bold text-base leading-tight">Pick a Team</p>
 					{#if nextPickerTeam}
-						<p class="text-sm text-muted-foreground">{nextPickerTeam.name} · Pick #{nextPickNumber} · Round {currentDraftRound}</p>
+						<p class="text-xs text-muted-foreground">{nextPickerTeam.name} · Pick #{nextPickNumber} · Round {currentDraftRound}</p>
 					{/if}
 				</div>
 				<button type="button" onclick={() => pickModalOpen = false}
-					class="rounded-full bg-muted p-2 text-muted-foreground hover:text-foreground active:scale-95 transition-all">
+					class="rounded-full bg-muted p-1.5 text-muted-foreground hover:text-foreground active:scale-95 transition-all">
 					<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
 						<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
 					</svg>
@@ -1295,15 +1301,15 @@
 
 			{#if pickConfirmed}
 				<!-- Success state -->
-				<div class="flex flex-col items-center justify-center flex-1 px-6 py-12 gap-4">
-					<div class="rounded-full bg-accent/20 p-5">
-						<svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+				<div class="flex flex-col items-center justify-center flex-1 px-6 py-8 gap-3">
+					<div class="rounded-full bg-accent/20 p-4">
+						<svg xmlns="http://www.w3.org/2000/svg" class="h-9 w-9 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
 							<path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
 						</svg>
 					</div>
-					<p class="text-xl font-bold text-accent">Pick Confirmed!</p>
+					<p class="text-lg font-bold text-accent">Pick Confirmed!</p>
 					{#if pendingPickTeam}
-						<p class="text-center text-muted-foreground">
+						<p class="text-center text-sm text-muted-foreground">
 							<span class="font-semibold text-foreground">#{pendingPickTeam.seed} {pendingPickTeam.name}</span><br/>
 							{pendingPickTeam.region} · Pick #{nextPickNumber - 1}
 						</p>
@@ -1312,33 +1318,33 @@
 
 			{:else if pendingPickTeam}
 				<!-- Confirmation step -->
-				<div class="flex flex-col flex-1 px-4 pb-6 pt-2 gap-4">
-					<p class="text-sm text-muted-foreground text-center">Confirm your selection</p>
+				<div class="flex flex-col flex-1 px-4 pb-4 pt-1 gap-3">
+					<p class="text-xs text-muted-foreground text-center">Confirm your selection</p>
 
 					<!-- Selected team card -->
-					<div class="rounded-2xl border-2 border-primary bg-primary/5 px-5 py-6 text-center">
-						<p class="text-xs font-mono text-muted-foreground mb-1">#{pendingPickTeam.seed} · {pendingPickTeam.region}</p>
-						<p class="text-3xl font-bold text-primary leading-tight">{pendingPickTeam.name}</p>
+					<div class="rounded-xl border-2 border-primary bg-primary/5 px-4 py-4 text-center">
+						<p class="text-xs font-mono text-muted-foreground mb-0.5">#{pendingPickTeam.seed} · {pendingPickTeam.region}</p>
+						<p class="text-2xl font-bold text-primary leading-tight">{pendingPickTeam.name}</p>
 						{#if nextPickerTeam}
-							<p class="text-sm text-muted-foreground mt-2">for {nextPickerTeam.name} · Pick #{nextPickNumber}</p>
+							<p class="text-xs text-muted-foreground mt-1">for {nextPickerTeam.name} · Pick #{nextPickNumber}</p>
 						{/if}
 					</div>
 
-					<div class="flex gap-3 mt-auto">
+					<div class="flex gap-2">
 						<button
 							type="button"
 							onclick={() => pendingPickTeam = null}
 							disabled={pickPending}
-							class="flex-1 rounded-xl border-2 border-muted bg-muted/50 py-3.5 font-semibold text-muted-foreground
+							class="flex-1 rounded-xl border-2 border-muted bg-muted/50 py-2.5 text-sm font-semibold text-muted-foreground
 								hover:bg-muted active:scale-95 transition-all disabled:opacity-40"
 						>
-							← Go Back
+							← Back
 						</button>
 						<button
 							type="button"
 							onclick={confirmPick}
 							disabled={pickPending}
-							class="flex-1 rounded-xl bg-primary py-3.5 font-bold text-primary-foreground
+							class="flex-1 rounded-xl bg-primary py-2.5 text-sm font-bold text-primary-foreground
 								hover:bg-primary/90 active:scale-95 transition-all disabled:opacity-60
 								flex items-center justify-center gap-2"
 						>
@@ -1352,7 +1358,7 @@
 					</div>
 
 					{#if pickError}
-						<p class="text-sm text-destructive text-center">{pickError}</p>
+						<p class="text-xs text-destructive text-center">{pickError}</p>
 					{/if}
 				</div>
 
