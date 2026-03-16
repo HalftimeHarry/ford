@@ -137,15 +137,15 @@
 					<Card.CardContent>
 						<ol class="overflow-hidden rounded-lg border text-sm">
 							{#each [
-								{ n: 1, name: 'Doan, JK & Stutts', note: '2 teams' },
-								{ n: 2, name: 'Kevin & Lisa Hassett with Dustin' },
-								{ n: 3, name: 'Mike Scott & George' },
-								{ n: 4, name: 'Ryan & friends' },
-								{ n: 5, name: 'Charlie & TBD' },
-								{ n: 6, name: 'Mike Garcia' },
-								{ n: 7, name: 'Matt Weaver' },
-								{ n: 8, name: 'Dan Gaston' },
-								{ n: 9, name: 'Mike T & Ritchie Bartlett' },
+								{ n: 1, name: 'JK & DOAN' },
+								{ n: 2, name: 'SQUIDCO AND LEECHES' },
+								{ n: 3, name: 'CHEF MIKE & SLOW PAY BARTLETT' },
+								{ n: 4, name: 'MIKE SCOTT & JORGE' },
+								{ n: 5, name: 'MATT AND JOHN (The Apostles)' },
+								{ n: 6, name: 'TEAM HASSETT' },
+								{ n: 7, name: 'DDG (Debbie, Dolce & Garcia)r' },
+								{ n: 8, name: 'STUTTS & MJ' },
+								{ n: 9, name: 'RFT & FRIENDS' },
 							] as entry, i}
 								<li class="flex items-center gap-3 px-4 py-2.5 {i % 2 === 0 ? 'bg-card' : 'bg-muted/50'}">
 									<span class="w-5 text-right font-bold text-muted-foreground">{entry.n}.</span>
