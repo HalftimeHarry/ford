@@ -13,7 +13,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 			adminPb.collection('ncaa_teams').getFullList<NcaaTeam>({ sort: 'region,seed' }),
 			adminPb.collection('draft_picks').getFullList<DraftPick>({
 				sort: 'pick_number',
-				expand: 'user,team'
+				expand: 'user,team,pool_team'
 			}),
 			adminPb.collection('pool_teams').getFullList<PoolTeam>({ sort: 'name' }),
 			adminPb.collection('join_requests').getFullList<JoinRequest>({ expand: 'user,pool_team' }),
@@ -113,18 +113,14 @@ export const actions: Actions = {
 			return fail(403, { pickError: 'It is not your turn to pick' });
 		}
 
-		const data = {
-			user: userId,
-			team: formData.get('team') as string,
-			draft_round: draftRound,
-			pick_number: allPicks.length + 1
-		};
-
-		const result = draftPickSchema.safeParse(data);
-		if (!result.success) return fail(400, { pickError: result.error.issues[0].message });
-
 		try {
-			await adminPb.collection('draft_picks').create(result.data);
+			await adminPb.collection('draft_picks').create({
+				user: userId,
+				team: formData.get('team') as string,
+				pool_team: myPoolTeamId,
+				draft_round: draftRound,
+				pick_number: allPicks.length + 1
+			});
 			if (settings.timer_seconds > 0) {
 				const deadline = new Date(Date.now() + settings.timer_seconds * 1000).toISOString();
 				await adminPb.collection('draft_settings').update(settings.id, { current_pick_deadline: deadline });

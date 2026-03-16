@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
+	import { invalidateAll } from '$app/navigation';
 	import { onMount, onDestroy } from 'svelte';
 	import { Button } from '$lib/components/ui/button';
 	import { Label } from '$lib/components/ui/label';
@@ -221,9 +222,15 @@
 	}
 
 	async function confirmPick() {
-		if (!nextPickerTeam || !pendingPickTeam || pickPending) return;
+		console.debug('[PICK] confirmPick guard — nextPickerTeam:', nextPickerTeam?.name, 'pendingPickTeam:', pendingPickTeam?.name, 'pickPending:', pickPending);
+		if (!nextPickerTeam || !pendingPickTeam || pickPending) {
+			console.warn('[PICK] confirmPick BLOCKED — nextPickerTeam:', !!nextPickerTeam, 'pendingPickTeam:', !!pendingPickTeam, 'pickPending:', pickPending);
+			return;
+		}
+		console.debug('[PICK] confirmPick called — team:', pendingPickTeam.name, 'for:', nextPickerTeam.name, 'pick#:', nextPickNumber, 'round:', currentDraftRound);
 		pickConfirmed = false;
 		await submitPick(nextPickerTeam.id, pendingPickTeam.id, currentDraftRound, nextPickNumber);
+		console.debug('[PICK] submitPick returned — pickSuccess:', pickSuccess, 'pickError:', pickError);
 		pickConfirmed = true;
 		setTimeout(() => { pickModalOpen = false; pickConfirmed = false; pendingPickTeam = null; }, 1800);
 	}
@@ -282,27 +289,54 @@
 	// --- Timer ---
 	let timeRemaining = $state(0);
 	let timerInterval: ReturnType<typeof setInterval> | null = null;
+	let pollInterval: ReturnType<typeof setInterval> | null = null;
 
 	let isLive = $derived(settings?.status === 'in_progress');
 	let hasTimer = $derived((settings?.timer_seconds ?? 0) > 0);
 
 	function updateTimer() {
-		if (!settings?.current_pick_deadline) {
-			timeRemaining = 0;
-			return;
+		if (settings?.current_pick_deadline) {
+			const deadline = new Date(settings.current_pick_deadline).getTime();
+			timeRemaining = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
+		} else if (isLive && (settings?.timer_seconds ?? 0) > 0 && timeRemaining > 0) {
+			timeRemaining = Math.max(0, timeRemaining - 1);
 		}
-		const deadline = new Date(settings.current_pick_deadline).getTime();
-		timeRemaining = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
 	}
 
+	// Snap timer immediately when deadline or live status changes
+	$effect(() => {
+		const deadline = settings?.current_pick_deadline;
+		const live = isLive;
+		const secs = settings?.timer_seconds ?? 0;
+
+		if (deadline) {
+			const computed = Math.max(0, Math.ceil((new Date(deadline).getTime() - Date.now()) / 1000));
+			console.debug('[TIMER] deadline from server:', deadline, '→ timeRemaining =', computed, 's');
+			timeRemaining = computed;
+		} else if (live && secs > 0 && timeRemaining === 0) {
+			console.debug('[TIMER] no deadline yet, seeding from timer_seconds =', secs);
+			timeRemaining = secs;
+		} else {
+			console.debug('[TIMER] $effect fired — live:', live, 'deadline:', deadline, 'secs:', secs, 'timeRemaining:', timeRemaining);
+		}
+	});
+
 	onMount(() => {
-		updateTimer();
+		// Kick off an immediate fetch so the timer starts as soon as the page loads
+		invalidateAll().then(() => updateTimer());
 		timerInterval = setInterval(updateTimer, 1000);
 		refreshQuickPick();
+		pollInterval = setInterval(async () => {
+			if (settings?.status !== 'completed') {
+				await invalidateAll();
+				updateTimer();
+			}
+		}, 2000);
 	});
 
 	onDestroy(() => {
 		if (timerInterval) clearInterval(timerInterval);
+		if (pollInterval) clearInterval(pollInterval);
 	});
 
 	function formatTime(seconds: number): string {
@@ -395,17 +429,50 @@
 		fd.set('draft_round', String(draftRound));
 		fd.set('pick_number', String(pickNumber));
 		try {
-			const res = await fetch('?/makePick', { method: 'POST', body: fd });
-			const json = await res.json();
-			if (!res.ok || json?.status === 'error') {
-				pickError = json?.data?.pickError ?? json?.error ?? 'Pick failed';
+			console.debug('[PICK] fetching ?/makePick — pool_team:', poolTeamId, 'team:', ncaaTeamId, 'round:', draftRound, 'pick#:', pickNumber);
+			const res = await fetch('?/makePick', {
+				method: 'POST',
+				body: fd,
+				headers: { 'x-sveltekit-action': 'true' }
+			});
+			const raw = await res.text();
+			console.debug('[PICK] makePick raw response — status:', res.status, 'body:', raw);
+			let json: Record<string, unknown> = {};
+			try { json = JSON.parse(raw); } catch { console.error('[PICK] response was not JSON'); }
+
+			// SvelteKit encodes action data with devalue — the `data` field may be a JSON string
+			// that itself encodes the form return value as an array of [key, value] pairs.
+			let actionData: Record<string, unknown> = {};
+			try {
+				const raw_data = json?.data;
+				if (typeof raw_data === 'string') {
+					// devalue compact format: parse the string then walk the array
+					const parsed = JSON.parse(raw_data);
+					if (Array.isArray(parsed)) {
+						// flat key-value pairs: ["pickError", "msg", ...]
+						for (let i = 0; i < parsed.length - 1; i += 2) {
+							actionData[parsed[i]] = parsed[i + 1];
+						}
+					}
+				} else if (raw_data && typeof raw_data === 'object') {
+					actionData = raw_data as Record<string, unknown>;
+				}
+			} catch { /* ignore parse errors */ }
+
+			if (json?.type === 'failure' || json?.type === 'error') {
+				pickError = (actionData?.pickError as string) ?? `Pick failed (status ${res.status})`;
+				console.error('[PICK] pick failed — actionData:', JSON.stringify(actionData), 'full json:', JSON.stringify(json));
 			} else {
 				pickSuccess = true;
-				// Reload to refresh picks
-				setTimeout(() => location.reload(), 600);
+				console.debug('[PICK] pick success — calling invalidateAll');
+				pickModalOpen = false;
+				pendingPickTeam = null;
+				await invalidateAll();
+				console.debug('[PICK] invalidateAll done — picks now:', data.picks.length);
 			}
-		} catch {
+		} catch (e) {
 			pickError = 'Network error';
+			console.error('[PICK] fetch error:', e);
 		} finally {
 			pickPending = false;
 		}
@@ -478,6 +545,134 @@
 
 
 
+	{#if !isLive}
+	<!-- Pre-draft controls: timer + lottery order + start draft in one row -->
+	{#if settings && (isNotStarted || isPaused)}
+	<Card.Card>
+		<Card.CardContent class="pt-4 pb-4">
+			<div class="flex flex-col lg:flex-row gap-4">
+
+				<!-- Pick Timer (compact inline) -->
+				<div class="shrink-0 lg:w-48">
+					<p class="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Pick Timer</p>
+					<form method="POST" action="?/updateSettings" use:enhance class="space-y-1.5">
+						<input type="hidden" name="settings_id" value={settings.id} />
+						<input type="hidden" name="timer_seconds" value={selectedTimer} />
+						<div class="flex flex-wrap gap-1.5">
+							{#each TIMER_PRESETS as preset}
+								<button
+									type="button"
+									onclick={() => (selectedTimer = preset.value)}
+									class="rounded-md border px-3 py-1.5 text-sm transition-colors
+										{selectedTimer === preset.value
+										? 'border-primary bg-primary text-primary-foreground'
+										: 'border-input hover:bg-muted'}"
+								>
+									{preset.label}
+								</button>
+							{/each}
+						</div>
+						<Button type="submit" variant="outline" size="sm" class="w-full mt-1">Save</Button>
+						{#if form?.settingsSuccess}<p class="text-xs text-accent mt-1">Saved!</p>{/if}
+					</form>
+				</div>
+
+				<div class="hidden lg:block w-px bg-border self-stretch"></div>
+
+				<!-- Lottery Order -->
+				{#if isNotStarted}
+				{@const orderConfirmed = (data.draftOrders ?? []).filter((o) => o.round_group === 1).length === (data.poolTeams ?? []).length}
+				<div class="flex-1 min-w-0">
+					<div class="flex items-center justify-between gap-2 mb-2">
+						<p class="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+							<Shuffle class="h-3 w-3" /> Lottery Order (Group 1)
+							{#if orderConfirmed}<span class="text-accent normal-case font-normal">✅ Confirmed</span>{/if}
+						</p>
+						<Button variant="outline" size="sm" class="h-7 px-2 text-xs gap-1 shrink-0" onclick={randomizeDraftOrder}>
+							<Shuffle class="h-3 w-3" /> Randomize
+						</Button>
+					</div>
+					<ol class="grid grid-cols-2 sm:grid-cols-5 gap-1 mb-2">
+						{#each draftOrder as teamId, i}
+							{@const pt = (data.poolTeams ?? []).find((t) => t.id === teamId)}
+							<!-- svelte-ignore a11y_no_static_element_interactions -->
+							<li
+								draggable="true"
+								ondragstart={(e) => orderDragStart(e, teamId)}
+								ondragover={(e) => orderDragOver(e, i)}
+								ondrop={() => orderDrop(i)}
+								ondragend={() => { orderDraggedId = ''; orderDragOverIdx = -1; }}
+								class="flex items-center gap-1.5 rounded px-2 py-1.5 text-xs cursor-grab active:cursor-grabbing transition-colors
+									{orderDragOverIdx === i ? 'bg-primary/20 border border-primary' : 'bg-muted/40 hover:bg-muted/70'}"
+							>
+								<span class="w-4 shrink-0 text-right text-muted-foreground font-mono">{i + 1}</span>
+								<span class="truncate font-medium">{pt?.name ?? teamId}</span>
+								<svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 text-muted-foreground/40 shrink-0 ml-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+									<path stroke-linecap="round" stroke-linejoin="round" d="M8 9l4-4 4 4m0 6l-4 4-4-4" />
+								</svg>
+							</li>
+						{/each}
+					</ol>
+					<form method="POST" action="?/saveOrder" use:enhance={() => {
+							confirmingOrder = true;
+							return async ({ update }) => { await update(); confirmingOrder = false; };
+						}}>
+						<input type="hidden" name="round_group" value="1" />
+						<input type="hidden" name="ordered_team_ids" value={draftOrder.join(',')} />
+						<Button type="submit" variant={orderConfirmed ? 'outline' : 'default'} size="sm" class="w-full" disabled={confirmingOrder}>
+							{#if confirmingOrder}<LoaderCircle class="h-3.5 w-3.5 animate-spin mr-1.5" />Saving…
+							{:else}{orderConfirmed ? 'Re-confirm Order' : 'Confirm Order'}{/if}
+						</Button>
+						{#if form?.orderError}<p class="mt-1 text-xs text-destructive">{form.orderError}</p>{/if}
+					</form>
+				</div>
+
+				<div class="hidden lg:block w-px bg-border self-stretch"></div>
+
+				<!-- Start Draft -->
+				{@const poolReady = isPoolDraftReady(data.poolTeams ?? [], data.joinRequests ?? [])}
+				<div class="shrink-0 lg:w-44 flex flex-col gap-2 justify-center">
+					{#if !poolReady}
+						<p class="text-xs text-amber-600 dark:text-amber-400 text-center">
+							⚠️ {(data.joinRequests ?? []).filter(r => r.status === 'approved').map(r => r.pool_team).filter((v, i, a) => a.indexOf(v) === i).length}/{data.poolTeams?.length ?? 0} teams approved
+						</p>
+					{/if}
+					{#if !orderConfirmed}
+						<p class="text-xs text-muted-foreground text-center">Confirm order to unlock.</p>
+					{/if}
+					<form method="POST" action="?/startDraft" use:enhance={() => {
+							startingDraft = true;
+							return async ({ update }) => { await update(); startingDraft = false; };
+						}}>
+						<input type="hidden" name="settings_id" value={settings.id} />
+						<input type="hidden" name="timer_seconds" value={selectedTimer} />
+						<input type="hidden" name="ordered_team_ids" value={draftOrder.join(',')} />
+						<Button type="submit" class="w-full" disabled={!orderConfirmed || startingDraft}>
+							{#if startingDraft}<LoaderCircle class="h-4 w-4 animate-spin mr-2" />Starting…
+							{:else}Start Draft{/if}
+						</Button>
+						{#if form?.startError}<p class="mt-1 text-xs text-destructive">{form.startError}</p>{/if}
+					</form>
+				</div>
+				{/if}
+
+				<!-- Resume (paused state) -->
+				{#if isPaused}
+				<div class="shrink-0 lg:w-44 flex flex-col justify-center">
+					<form method="POST" action="?/resumeDraft" use:enhance>
+						<input type="hidden" name="settings_id" value={settings.id} />
+						<input type="hidden" name="timer_seconds" value={selectedTimer} />
+						<Button type="submit" class="w-full" size="sm">Resume Draft</Button>
+					</form>
+				</div>
+				{/if}
+
+			</div>
+		</Card.CardContent>
+	</Card.Card>
+	{/if}
+	{/if}
+
 	<!-- Draft Log -->
 	<Card.Card>
 		<Card.CardHeader class="pb-3">
@@ -489,35 +684,35 @@
 			{#if data.picks.length === 0}
 				<p class="text-sm text-muted-foreground">No picks yet.</p>
 			{:else}
-				<div class="overflow-hidden rounded-lg border text-sm">
-					{#each [...data.picks].reverse() as pick, i}
+				<div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
+					{#each [...data.picks].reverse() as pick}
 						{@const team = pick.expand?.team}
-						{@const pickUserId = pick.user}
-						{@const pickPoolTeamId = (data.joinRequests ?? []).find((r) => r.user === pickUserId && r.status === 'approved')?.pool_team}
-						{@const pickPoolTeam = (data.poolTeams ?? []).find((t) => t.id === pickPoolTeamId)}
-						{@const roundGroup = pick.round_group ?? 1}
-						<div class="flex items-center gap-2 px-3 py-2 {i % 2 === 0 ? 'bg-card' : 'bg-muted/40'}">
-							<!-- Pick number -->
-							<span class="w-6 text-right font-mono text-xs text-muted-foreground shrink-0">#{pick.pick_number}</span>
-							<!-- Round group badge -->
-							<span class="shrink-0 rounded px-1 py-0.5 text-xs font-bold leading-none
-								{roundGroup === 1 ? 'bg-blue-500/15 text-blue-400'
-								: roundGroup === 2 ? 'bg-purple-500/15 text-purple-400'
-								: 'bg-orange-500/15 text-orange-400'}">
-								G{roundGroup}
-							</span>
-							<!-- Pool team -->
-							<span class="font-semibold truncate min-w-0 flex-1">{pickPoolTeam?.name ?? '?'}</span>
-							<!-- NCAA team -->
-							<span class="shrink-0 text-muted-foreground text-xs">#{team?.seed}</span>
-							<span class="truncate text-right min-w-0 max-w-[120px]">{team?.name ?? '?'}</span>
-							<!-- Region badge -->
-							<span class="shrink-0 hidden sm:inline rounded px-1 py-0.5 text-xs bg-muted text-muted-foreground leading-none">{team?.region?.slice(0,1) ?? ''}</span>
-							<!-- Undo -->
-							<form method="POST" action="?/undoPick" use:enhance class="shrink-0">
-								<input type="hidden" name="pick_id" value={pick.id} />
-								<button type="submit" class="text-xs text-destructive/50 hover:text-destructive">undo</button>
-							</form>
+						{@const pickPoolTeam = pick.expand?.pool_team ?? (data.poolTeams ?? []).find((t) => t.id === pick.pool_team)}
+						{@const roundGroup = Math.ceil((pick.draft_round ?? 1) / 2)}
+						{@const regionColor = team?.region === 'East' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300' : team?.region === 'West' ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300' : team?.region === 'South' ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300' : 'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300'}
+						{@const groupColor = roundGroup === 1 ? 'bg-blue-500/15 text-blue-400' : roundGroup === 2 ? 'bg-purple-500/15 text-purple-400' : 'bg-orange-500/15 text-orange-400'}
+						<div class="rounded-lg border border-border bg-card p-3 flex flex-col gap-1.5 shadow-sm">
+							<!-- Pick number + group + undo -->
+							<div class="flex items-center justify-between gap-1">
+								<div class="flex items-center gap-1.5">
+									<span class="text-xs font-mono text-muted-foreground">#{pick.pick_number}</span>
+									<span class="rounded px-1 py-0.5 text-xs font-bold leading-none {groupColor}">G{roundGroup}</span>
+								</div>
+								<form method="POST" action="?/undoPick" use:enhance class="shrink-0">
+									<input type="hidden" name="pick_id" value={pick.id} />
+									<button type="submit" class="text-xs text-destructive/40 hover:text-destructive transition-colors">undo</button>
+								</form>
+							</div>
+							<!-- Team name + seed -->
+							<div class="flex items-baseline gap-1.5">
+								<span class="text-lg font-bold leading-tight tabular-nums text-muted-foreground/50">#{team?.seed ?? '?'}</span>
+								<span class="font-semibold text-sm leading-tight">{team?.name ?? '?'}</span>
+							</div>
+							<!-- Region badge + pool team -->
+							<div class="flex items-center justify-between gap-1 mt-0.5">
+								<span class="inline-flex items-center rounded px-1.5 py-0.5 text-xs font-medium {regionColor}">{team?.region ?? '—'}</span>
+								<span class="text-xs text-muted-foreground truncate max-w-[60%] text-right">{pickPoolTeam?.name ?? '?'}</span>
+							</div>
 						</div>
 					{/each}
 				</div>
@@ -755,200 +950,8 @@
 		</div>
 	{/if}
 
-	<div class="{isLive ? 'grid gap-6 lg:grid-cols-[1fr_320px]' : 'grid gap-6 lg:grid-cols-[280px_1fr_300px]'}">
-		<!-- Column 1: Controls (not-started / paused only) -->
-		{#if !isLive}
-		<div class="space-y-4">
-			<!-- Draft Settings (before start or when paused) -->
-			{#if settings && (isNotStarted || isPaused)}
-				<Card.Card>
-					<Card.CardHeader class="pb-3">
-						<Card.CardTitle>Draft Settings</Card.CardTitle>
-					</Card.CardHeader>
-					<Card.CardContent>
-						<form method="POST" action="?/updateSettings" use:enhance>
-							<input type="hidden" name="settings_id" value={settings.id} />
-							<input type="hidden" name="timer_seconds" value={selectedTimer} />
-							<div class="space-y-3">
-								<Label class="text-xs uppercase tracking-wider text-muted-foreground">Pick Timer</Label>
-								{#each TIMER_PRESETS as preset}
-									<label
-										class="flex items-center gap-3 rounded-md border px-3 py-1.5 cursor-pointer transition-colors text-sm
-											{selectedTimer === preset.value
-											? 'border-primary bg-primary/5'
-											: 'border-input hover:bg-muted'}"
-									>
-										<input
-											type="radio"
-											name="timer_radio"
-											value={preset.value}
-											checked={selectedTimer === preset.value}
-											onchange={() => (selectedTimer = preset.value)}
-											class="h-3.5 w-3.5 accent-primary"
-										/>
-										<span>{preset.label}</span>
-										{#if preset.value === 600}
-											<span class="ml-auto text-xs text-muted-foreground">default</span>
-										{/if}
-									</label>
-								{/each}
-								<Button type="submit" variant="outline" class="w-full" size="sm">Save Settings</Button>
-							</div>
-						</form>
-						{#if form?.settingsSuccess}
-							<p class="mt-2 text-xs text-accent">Settings saved!</p>
-						{/if}
-					</Card.CardContent>
-				</Card.Card>
-			{/if}
-
-			<!-- Start Draft -->
-			{#if settings && isNotStarted}
-				{@const poolReady = isPoolDraftReady(data.poolTeams ?? [], data.joinRequests ?? [])}
-				{@const orderConfirmed = (data.draftOrders ?? []).filter((o) => o.round_group === 1).length === (data.poolTeams ?? []).length}
-
-				<!-- Lottery order: drag pool teams to set pick order -->
-				<Card.Card class="{orderConfirmed ? 'border-accent/50' : ''}">
-					<Card.CardHeader class="pb-2">
-						<div class="flex items-center justify-between gap-2">
-							<Card.CardTitle class="flex items-center gap-1.5 text-sm">
-								<Shuffle class="h-3.5 w-3.5" /> Lottery Order (Group 1)
-								{#if orderConfirmed}
-									<span class="text-xs font-normal text-accent">✅ Confirmed</span>
-								{/if}
-							</Card.CardTitle>
-							<Button variant="outline" size="sm" class="h-7 px-2 text-xs gap-1" onclick={randomizeDraftOrder}>
-								<Shuffle class="h-3 w-3" /> Randomize
-							</Button>
-						</div>
-						<p class="text-xs text-muted-foreground mt-1">
-							Drag to reorder or randomize, then hit Confirm Order. Start Draft unlocks once confirmed.
-							<button type="button" onclick={() => showGroupInfo = !showGroupInfo}
-								class="text-primary underline-offset-2 hover:underline ml-1">{showGroupInfo ? 'Less ↑' : 'More…'}</button>
-						</p>
-
-						{#if showGroupInfo}
-							<div class="mt-3 rounded-lg bg-muted/50 border border-border p-3 space-y-2.5 text-xs text-muted-foreground">
-								<p class="font-semibold text-foreground text-sm">How Draft Groups Work</p>
-								<p>The draft is split into <strong>3 groups of 2 rounds each</strong> (6 rounds total for 10 teams = 60 picks). Each group uses its own lottery order, so the pick order can change between groups.</p>
-
-								<div class="space-y-1.5">
-									<div class="flex gap-2">
-										<span class="shrink-0 rounded bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400 font-bold px-1.5 py-0.5">G1</span>
-										<span><strong>Rounds 1–2</strong> — First 2 picks per team. Snake order: round 1 goes 1→10, round 2 reverses 10→1.</span>
-									</div>
-									<div class="flex gap-2">
-										<span class="shrink-0 rounded bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-400 font-bold px-1.5 py-0.5">G2</span>
-										<span><strong>Rounds 3–4</strong> — A new lottery order is set for this group. Same snake pattern.</span>
-									</div>
-									<div class="flex gap-2">
-										<span class="shrink-0 rounded bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-400 font-bold px-1.5 py-0.5">G3</span>
-										<span><strong>Rounds 5–6</strong> — Final group. Another new lottery order. Last 2 picks per team.</span>
-									</div>
-								</div>
-
-								<p class="border-t border-border pt-2">You are currently setting the order for <strong>Group 1</strong>. Groups 2 and 3 can be configured before their rounds begin.</p>
-							</div>
-						{/if}
-					</Card.CardHeader>
-					<Card.CardContent class="p-2">
-						<ol class="space-y-1">
-							{#each draftOrder as teamId, i}
-								{@const pt = (data.poolTeams ?? []).find((t) => t.id === teamId)}
-								<!-- svelte-ignore a11y_no_static_element_interactions -->
-								<li
-									draggable="true"
-									ondragstart={(e) => orderDragStart(e, teamId)}
-									ondragover={(e) => orderDragOver(e, i)}
-									ondrop={() => orderDrop(i)}
-									ondragend={() => { orderDraggedId = ''; orderDragOverIdx = -1; }}
-									class="flex items-center gap-2 rounded px-2 py-1.5 text-xs cursor-grab active:cursor-grabbing transition-colors
-										{orderDragOverIdx === i ? 'bg-primary/20 border border-primary' : 'bg-muted/40 hover:bg-muted/70'}"
-								>
-									<span class="w-4 text-right text-muted-foreground font-mono">{i + 1}</span>
-									<span class="flex-1 truncate font-medium">{pt?.name ?? teamId}</span>
-									<svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 text-muted-foreground/50 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-										<path stroke-linecap="round" stroke-linejoin="round" d="M8 9l4-4 4 4m0 6l-4 4-4-4" />
-									</svg>
-								</li>
-							{/each}
-						</ol>
-						<div class="mt-2 flex gap-2">
-							<form method="POST" action="?/saveOrder" use:enhance={() => {
-									confirmingOrder = true;
-									return async ({ update }) => {
-										await update();
-										confirmingOrder = false;
-									};
-								}} class="flex-1">
-								<input type="hidden" name="round_group" value="1" />
-								<input type="hidden" name="ordered_team_ids" value={draftOrder.join(',')} />
-								<Button type="submit" variant={orderConfirmed ? 'outline' : 'default'} class="w-full" size="sm" disabled={confirmingOrder}>
-									{#if confirmingOrder}
-										<LoaderCircle class="h-3.5 w-3.5 animate-spin mr-1.5" />
-										Saving…
-									{:else}
-										{orderConfirmed ? 'Re-confirm Order' : 'Confirm Order'}
-									{/if}
-								</Button>
-							</form>
-						</div>
-						{#if form?.orderError}
-							<p class="mt-2 text-xs text-destructive">{form.orderError}</p>
-						{/if}
-					</Card.CardContent>
-				</Card.Card>
-
-				<Card.Card class="border-primary/30">
-					<Card.CardContent class="pt-6 space-y-3">
-						{#if !poolReady}
-							<p class="text-xs text-muted-foreground text-center">
-								Draft locked until all 10 teams have an approved participant.
-							</p>
-						{:else if !orderConfirmed}
-							<p class="text-xs text-muted-foreground text-center">
-								Confirm the lottery order above to unlock Start Draft.
-							</p>
-						{/if}
-						<form method="POST" action="?/startDraft" use:enhance={() => {
-								startingDraft = true;
-								return async ({ update }) => {
-									await update();
-									startingDraft = false;
-								};
-							}}>
-							<input type="hidden" name="settings_id" value={settings.id} />
-							<input type="hidden" name="timer_seconds" value={selectedTimer} />
-							<input type="hidden" name="ordered_team_ids" value={draftOrder.join(',')} />
-							<Button type="submit" class="w-full" disabled={!poolReady || !orderConfirmed || startingDraft}>
-								{#if startingDraft}
-									<LoaderCircle class="h-4 w-4 animate-spin mr-2" />
-									Starting…
-								{:else}
-									Start Draft
-								{/if}
-							</Button>
-						</form>
-						{#if form?.startError}
-							<p class="mt-2 text-xs text-destructive">{form.startError}</p>
-						{/if}
-					</Card.CardContent>
-				</Card.Card>
-			{/if}
-
-			<!-- Pause / Resume (paused state only) -->
-			{#if settings && isPaused}
-				<form method="POST" action="?/resumeDraft" use:enhance>
-					<input type="hidden" name="settings_id" value={settings.id} />
-					<input type="hidden" name="timer_seconds" value={selectedTimer} />
-					<Button type="submit" class="w-full" size="sm">Resume Draft</Button>
-				</form>
-			{/if}
-		</div>
-		{/if}
-
-		<!-- Column 2 (or full-width left when live): Available Teams -->
-		<div>
+	<div class="{isLive ? 'grid gap-6 lg:grid-cols-[1fr_320px]' : 'space-y-6'}">
+		<!-- Available Teams -->
 			<Card.Card>
 				<Card.CardHeader class="pb-2">
 					<div class="flex items-center justify-between gap-3 flex-wrap">
@@ -1056,9 +1059,8 @@
 					</div>
 				</Card.CardContent>
 			</Card.Card>
-		</div>
 
-		<!-- Column 3: On the Clock + Drop Zone -->
+		<!-- On the Clock + Drop Zone -->
 		<div class="sticky top-4 space-y-3">
 			{#if draftComplete}
 				<div class="rounded-xl border-2 border-accent/30 bg-accent/5 p-8 text-center">

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
-	import { onMount, onDestroy } from 'svelte';
+	import { invalidateAll } from '$app/navigation';
+	import { onMount, onDestroy, tick } from 'svelte';
 	import { Button } from '$lib/components/ui/button';
 	import * as Card from '$lib/components/ui/card';
 	import { REGIONS } from '$lib/types';
@@ -43,20 +44,45 @@
 	// Timer
 	let timeRemaining = $state(0);
 	let timerInterval: ReturnType<typeof setInterval> | null = null;
+	let pollInterval: ReturnType<typeof setInterval> | null = null;
 
 	function updateTimer() {
-		if (!settings?.current_pick_deadline) { timeRemaining = 0; return; }
-		const deadline = new Date(settings.current_pick_deadline).getTime();
-		timeRemaining = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
+		if (settings?.current_pick_deadline) {
+			// Server deadline available — use it for accuracy
+			const deadline = new Date(settings.current_pick_deadline).getTime();
+			timeRemaining = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
+		} else if (isLive && (settings?.timer_seconds ?? 0) > 0 && timeRemaining > 0) {
+			// No deadline yet (page just loaded) — count down locally until server syncs
+			timeRemaining = Math.max(0, timeRemaining - 1);
+		}
 	}
 
+	// Snap timer whenever deadline or live status changes
+	$effect(() => {
+		const deadline = settings?.current_pick_deadline;
+		const live = isLive;
+		const secs = settings?.timer_seconds ?? 0;
+
+		if (deadline) {
+			// Accurate server deadline — always snap to it
+			timeRemaining = Math.max(0, Math.ceil((new Date(deadline).getTime() - Date.now()) / 1000));
+		} else if (live && secs > 0 && timeRemaining === 0) {
+			// Draft live but deadline not yet fetched — seed once so display starts immediately
+			timeRemaining = secs;
+		}
+	});
+
 	onMount(() => {
-		updateTimer();
+		invalidateAll();
 		timerInterval = setInterval(updateTimer, 1000);
+		pollInterval = setInterval(() => {
+			if (settings?.status !== 'completed') invalidateAll();
+		}, 2000);
 	});
 
 	onDestroy(() => {
 		if (timerInterval) clearInterval(timerInterval);
+		if (pollInterval) clearInterval(pollInterval);
 	});
 
 	function formatTime(s: number): string {
@@ -99,18 +125,27 @@
 		pendingPickTeam = team;
 	}
 
-	function confirmPick() {
+	async function confirmPick() {
 		if (!pendingPickTeam || pickModalPending) return;
 		pickModalPending = true;
-		selectedTeam = pendingPickTeam.id;
+		const teamId = pendingPickTeam.id;
+
+		// Set the hidden input value and wait for Svelte to flush the DOM before submitting
+		selectedTeam = teamId;
+		await tick();
 		const frm = document.getElementById('user-pick-form') as HTMLFormElement;
-		if (frm) frm.requestSubmit();
-		// success state shown via form result — reset pending flag after short delay
+		if (frm) {
+			// Directly set the input value as well to be safe
+			const input = frm.querySelector('input[name="team"]') as HTMLInputElement;
+			if (input) input.value = teamId;
+			frm.requestSubmit();
+		}
+		// Modal success state — actual result handled by use:enhance callback
 		setTimeout(() => {
 			pickConfirmed = true;
 			pickModalPending = false;
 			setTimeout(() => { pickModalOpen = false; pickConfirmed = false; pendingPickTeam = null; }, 1800);
-		}, 600);
+		}, 400);
 	}
 
 	let filteredTeams = $derived(() => {
@@ -141,14 +176,19 @@
 		dropHover = false;
 	}
 
-	function handleDrop(e: DragEvent) {
+	async function handleDrop(e: DragEvent) {
 		e.preventDefault();
 		dropHover = false;
 		const teamId = e.dataTransfer!.getData('text/plain');
 		if (teamId && !draftedTeamIds.has(teamId)) {
 			selectedTeam = teamId;
-			const form = document.getElementById('user-pick-form') as HTMLFormElement;
-			if (form) form.requestSubmit();
+			await tick();
+			const frm = document.getElementById('user-pick-form') as HTMLFormElement;
+			if (frm) {
+				const input = frm.querySelector('input[name="team"]') as HTMLInputElement;
+				if (input) input.value = teamId;
+				frm.requestSubmit();
+			}
 		}
 		draggedTeamId = '';
 	}
@@ -211,9 +251,20 @@
 		</div>
 	{/if}
 
-	<!-- Hidden form for drag-and-drop submission -->
+	<!-- Hidden form for pick submission -->
 	{#if data.canPick && !draftComplete}
-		<form method="POST" action="?/userPick" use:enhance id="user-pick-form" class="hidden">
+		<form method="POST" action="?/userPick" use:enhance={() => {
+			return async ({ result, update }) => {
+				if (result.type === 'success') {
+					await invalidateAll();
+				} else {
+					// On error, reset pending state so user can retry
+					pickModalPending = false;
+					pickConfirmed = false;
+					await update();
+				}
+			};
+		}} id="user-pick-form" class="hidden">
 			<input type="hidden" name="team" value={selectedTeam} />
 		</form>
 	{/if}
@@ -364,17 +415,29 @@
 			{#if data.picks.length === 0}
 				<p class="text-sm text-muted-foreground">Waiting for first pick...</p>
 			{:else}
-				<div class="grid gap-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+				<div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
 					{#each [...data.picks].reverse() as pick}
 						{@const user = pick.expand?.user}
 						{@const team = pick.expand?.team}
 						{@const isMe = (pick.user === data.userId || user?.id === data.userId)}
-						<div class="flex items-center gap-2 rounded px-3 py-1.5 text-sm {isMe ? 'bg-primary/10 font-medium' : 'hover:bg-muted'}">
-							<span class="w-5 text-right font-mono text-muted-foreground">{pick.pick_number}.</span>
-							<span>{user?.name ?? '?'}</span>
-							<span class="text-muted-foreground">—</span>
-							<span>({team?.seed}) {team?.name ?? '?'}</span>
-							<span class="ml-auto text-xs text-muted-foreground">R{pick.draft_round}</span>
+						{@const poolTeamName = pick.expand?.pool_team?.name ?? (data.poolTeams ?? []).find(t => t.id === pick.pool_team)?.name ?? user?.name ?? '?'}
+						{@const regionColor = team?.region === 'East' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300' : team?.region === 'West' ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300' : team?.region === 'South' ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300' : 'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300'}
+						<div class="rounded-lg border {isMe ? 'border-primary bg-primary/5' : 'border-border bg-card'} p-3 flex flex-col gap-1.5 shadow-sm">
+							<!-- Pick number + round -->
+							<div class="flex items-center justify-between">
+								<span class="text-xs font-mono text-muted-foreground">#{pick.pick_number}</span>
+								<span class="text-xs text-muted-foreground">Rd {pick.draft_round}</span>
+							</div>
+							<!-- Team name + seed -->
+							<div class="flex items-baseline gap-1.5">
+								<span class="text-lg font-bold leading-tight tabular-nums text-muted-foreground/60">#{team?.seed ?? '?'}</span>
+								<span class="font-semibold text-sm leading-tight">{team?.name ?? '?'}</span>
+							</div>
+							<!-- Region badge + pool team -->
+							<div class="flex items-center justify-between gap-1 mt-0.5">
+								<span class="inline-flex items-center rounded px-1.5 py-0.5 text-xs font-medium {regionColor}">{team?.region ?? '—'}</span>
+								<span class="text-xs text-muted-foreground truncate max-w-[60%] text-right">{poolTeamName}</span>
+							</div>
 						</div>
 					{/each}
 				</div>

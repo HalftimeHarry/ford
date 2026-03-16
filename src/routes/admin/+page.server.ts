@@ -11,7 +11,7 @@ export const load: PageServerLoad = async () => {
 			adminPb.collection('ncaa_teams').getFullList<NcaaTeam>({ sort: 'region,seed' }),
 			adminPb.collection('draft_picks').getFullList<DraftPick>({
 				sort: 'pick_number',
-				expand: 'user,team'
+				expand: 'user,team,pool_team'
 			}),
 			adminPb.collection('draft_orders').getFullList<DraftOrder>({
 				sort: 'round_group,position',
@@ -45,6 +45,25 @@ export const load: PageServerLoad = async () => {
 async function getAllPoolTeamIds(): Promise<string[]> {
 	const teams = await adminPb.collection('pool_teams').getFullList<PoolTeam>({ sort: 'name' });
 	return teams.map((t) => t.id);
+}
+
+// Cached admin user id — resolved once, reused for all admin picks
+let _adminUserId = '';
+async function getAdminUserId(): Promise<string> {
+	if (_adminUserId) return _adminUserId;
+	const users = await adminPb.collection('users').getFullList({ perPage: 50 });
+	const admin = users.find((u) => (u as Record<string,unknown>).role === 'admin');
+	_adminUserId = admin?.id ?? users[0]?.id ?? '';
+	return _adminUserId;
+}
+
+/** Resolve a user id for a pool team — approved member if exists, else pool admin fallback */
+async function resolveUserId(poolTeamId: string): Promise<string> {
+	const requests = await adminPb.collection('join_requests').getFullList<JoinRequest>({
+		filter: `pool_team = "${poolTeamId}" && status = "approved"`
+	});
+	if (requests[0]?.user) return requests[0].user;
+	return getAdminUserId();
 }
 
 export const actions: Actions = {
@@ -169,31 +188,23 @@ export const actions: Actions = {
 		}
 
 		try {
-			// Resolve a user for this pool team (first approved member)
-			const requests = await adminPb.collection('join_requests').getFullList<JoinRequest>({
-				filter: `pool_team = "${poolTeamId}" && status = "approved"`
-			});
-			if (requests.length === 0) {
-				return fail(400, { pickError: 'No approved user found for this pool team' });
-			}
-			const userId = requests[0].user;
+			const userId = await resolveUserId(poolTeamId);
 
-			const result = draftPickSchema.safeParse({
+			await adminPb.collection('draft_picks').create({
 				user: userId,
 				team: teamId,
+				pool_team: poolTeamId,
 				draft_round: draftRound,
 				pick_number: pickNumber
 			});
-			if (!result.success) {
-				return fail(400, { pickError: result.error.issues[0].message });
-			}
-
-			await adminPb.collection('draft_picks').create(result.data);
 			await advanceDeadline();
 			return { pickSuccess: true };
 		} catch (err: unknown) {
-			const message = err instanceof Error ? err.message : 'Failed to record pick';
-			return fail(500, { pickError: message });
+			const pb_err = err as { response?: { message?: string; data?: unknown }; message?: string };
+			const message = pb_err?.response?.message ?? pb_err?.message ?? 'Failed to record pick';
+			const detail = pb_err?.response?.data ? JSON.stringify(pb_err.response.data) : '';
+			console.error('[makePick] error:', message, detail);
+			return fail(500, { pickError: `${message}${detail ? ': ' + detail : ''}` });
 		}
 	},
 
@@ -228,17 +239,12 @@ export const actions: Actions = {
 			const order = groupOrders.find((o) => o.position === positionIndex + 1);
 			if (!order) return fail(400, { pickError: 'No draft order set for this round group. Confirm the lottery order first.' });
 
-			// Resolve a user for this pool team
-			const requests = await adminPb.collection('join_requests').getFullList<JoinRequest>({
-				filter: `pool_team = "${order.pool_team}" && status = "approved"`
-			});
-			if (requests.length === 0) return fail(400, { pickError: 'No approved user for on-clock team' });
+			const userId = await resolveUserId(order.pool_team);
 
 			await adminPb.collection('draft_picks').create({
-				user: requests[0].user,
+				user: userId,
 				team: bestTeam.id,
 				pool_team: order.pool_team,
-				round_group: roundGroup,
 				draft_round: draftRound,
 				pick_number: nextPickNumber
 			});

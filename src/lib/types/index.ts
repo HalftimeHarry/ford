@@ -79,6 +79,7 @@ export interface DraftPick {
 	id: string;
 	user: string; // relation -> users
 	team: string; // relation -> ncaa_teams
+	pool_team: string; // relation -> pool_teams
 	draft_round: number; // 1-6
 	pick_number: number; // overall pick order
 	created: string;
@@ -86,6 +87,7 @@ export interface DraftPick {
 	expand?: {
 		user?: User;
 		team?: NcaaTeam;
+		pool_team?: PoolTeam;
 	};
 }
 
@@ -186,7 +188,7 @@ export const loginSchema = z.object({
 });
 
 export const draftPickSchema = z.object({
-	user: z.string().min(1, 'User is required'),
+	user: z.string().optional().default(''),
 	team: z.string().min(1, 'Team is required'),
 	draft_round: z.number().min(1).max(DRAFT_ROUNDS),
 	pick_number: z.number().min(1)
