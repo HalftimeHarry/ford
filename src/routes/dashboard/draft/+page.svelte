@@ -415,28 +415,31 @@
 			{#if data.picks.length === 0}
 				<p class="text-sm text-muted-foreground">Waiting for first pick...</p>
 			{:else}
-				<div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
-					{#each [...data.picks].reverse() as pick}
-						{@const user = pick.expand?.user}
-						{@const team = pick.expand?.team}
-						{@const isMe = (pick.user === data.userId || user?.id === data.userId)}
-						{@const poolTeamName = pick.expand?.pool_team?.name ?? (data.poolTeams ?? []).find(t => t.id === pick.pool_team)?.name ?? user?.name ?? '?'}
-						{@const regionColor = team?.region === 'East' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300' : team?.region === 'West' ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300' : team?.region === 'South' ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300' : 'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300'}
-						<div class="rounded-lg border {isMe ? 'border-primary bg-primary/5' : 'border-border bg-card'} p-3 flex flex-col gap-1.5 shadow-sm">
-							<!-- Pick number + round -->
-							<div class="flex items-center justify-between">
-								<span class="text-xs font-mono text-muted-foreground">#{pick.pick_number}</span>
-								<span class="text-xs text-muted-foreground">Rd {pick.draft_round}</span>
+				{@const picksByTeam = (data.poolTeams ?? []).map(pt => ({
+					pt,
+					isMe: data.picks.some(p => (p.pool_team === pt.id || p.expand?.pool_team?.id === pt.id) && (p.user === data.userId || p.expand?.user?.id === data.userId)),
+					picks: data.picks.filter(p => p.pool_team === pt.id || p.expand?.pool_team?.id === pt.id).sort((a,b) => a.pick_number - b.pick_number)
+				})).filter(g => g.picks.length > 0)}
+				<div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
+					{#each picksByTeam as { pt, picks: teamPicks, isMe }}
+						<div class="rounded-lg border {isMe ? 'border-primary' : 'border-border'} bg-card shadow-sm flex flex-col">
+							<!-- Pool team header -->
+							<div class="px-3 py-2 border-b border-border {isMe ? 'bg-primary/10' : 'bg-muted/40'} rounded-t-lg">
+								<p class="text-xs font-semibold truncate {isMe ? 'text-primary' : ''}">{pt.name}</p>
+								<p class="text-xs text-muted-foreground">{teamPicks.length} pick{teamPicks.length !== 1 ? 's' : ''}</p>
 							</div>
-							<!-- Team name + seed -->
-							<div class="flex items-baseline gap-1.5">
-								<span class="text-lg font-bold leading-tight tabular-nums text-muted-foreground/60">#{team?.seed ?? '?'}</span>
-								<span class="font-semibold text-sm leading-tight">{team?.name ?? '?'}</span>
-							</div>
-							<!-- Region badge + pool team -->
-							<div class="flex items-center justify-between gap-1 mt-0.5">
-								<span class="inline-flex items-center rounded px-1.5 py-0.5 text-xs font-medium {regionColor}">{team?.region ?? '—'}</span>
-								<span class="text-xs text-muted-foreground truncate max-w-[60%] text-right">{poolTeamName}</span>
+							<!-- Pick rows -->
+							<div class="flex flex-col divide-y divide-border">
+								{#each teamPicks as pick}
+									{@const team = pick.expand?.team}
+									{@const regionColor = team?.region === 'East' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300' : team?.region === 'West' ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300' : team?.region === 'South' ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300' : 'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300'}
+									<div class="px-3 py-1.5 flex items-center gap-2">
+										<span class="w-5 shrink-0 text-right text-xs font-bold tabular-nums text-muted-foreground/60">#{team?.seed ?? '?'}</span>
+										<span class="flex-1 text-xs font-medium truncate">{team?.name ?? '?'}</span>
+										<span class="shrink-0 rounded px-1 py-0.5 text-xs leading-none {regionColor}">{team?.region?.slice(0,1) ?? '?'}</span>
+										<span class="shrink-0 text-xs text-muted-foreground/50">Rd{pick.draft_round}</span>
+									</div>
+								{/each}
 							</div>
 						</div>
 					{/each}

@@ -4,6 +4,22 @@ import { autoPick } from '$lib/types';
 import type { Actions, PageServerLoad } from './$types';
 import type { NcaaTeam, DraftPick, DraftOrder, DraftSettings, PoolTeam, JoinRequest } from '$lib/types';
 
+// Cached admin user id for picks where no approved participant exists
+let _adminUserId = '';
+async function getAdminUserId(): Promise<string> {
+	if (_adminUserId) return _adminUserId;
+	const users = await adminPb.collection('users').getFullList({ perPage: 50 });
+	const admin = users.find((u) => (u as Record<string, unknown>).role === 'admin');
+	_adminUserId = admin?.id ?? users[0]?.id ?? '';
+	return _adminUserId;
+}
+
+async function resolveUserId(poolTeamId: string, joinRequests: JoinRequest[]): Promise<string> {
+	const approved = joinRequests.find((r) => r.pool_team === poolTeamId && r.status === 'approved');
+	if (approved?.user) return approved.user;
+	return getAdminUserId();
+}
+
 export const load: PageServerLoad = async () => {
 	await ensureAdminAuth();
 	const [picks, results, orders, poolTeams, ncaaTeams] = await Promise.all([
@@ -62,14 +78,6 @@ export const actions: Actions = {
 				return fail(400, { seedError: 'Draft already has 60 picks — reset first.' });
 			}
 
-			// Map pool_team id → first approved user id
-			const teamToUser: Record<string, string> = {};
-			for (const req of joinRequests) {
-				if (!teamToUser[req.pool_team]) teamToUser[req.pool_team] = req.user;
-			}
-
-			// Build a random snake order for group 1 (positions 1-10)
-			const shuffled = [...poolTeams].sort(() => Math.random() - 0.5);
 			const entryCount = poolTeams.length; // 10
 
 			// Create draft_orders for all 3 round groups
@@ -96,7 +104,7 @@ export const actions: Actions = {
 
 			// Simulate all 60 picks
 			const draftedIds = new Set<string>();
-			const picks: Array<{ user: string; team: string; draft_round: number; pick_number: number }> = [];
+			const picks: Array<{ user: string; team: string; pool_team: string; draft_round: number; pick_number: number }> = [];
 
 			for (let pickNum = 1; pickNum <= entryCount * 6; pickNum++) {
 				const draftRound = Math.min(Math.floor((pickNum - 1) / entryCount) + 1, 6);
@@ -109,15 +117,14 @@ export const actions: Actions = {
 				const order = groupOrders.find((o) => o.position === positionIndex + 1);
 				if (!order) continue;
 
-				const userId = teamToUser[order.pool_team];
-				if (!userId) continue;
+				const userId = await resolveUserId(order.pool_team, joinRequests);
 
 				const available = ncaaTeams.filter((t) => !draftedIds.has(t.id));
 				const best = autoPick(available);
 				if (!best) break;
 
 				draftedIds.add(best.id);
-				picks.push({ user: userId, team: best.id, draft_round: draftRound, pick_number: pickNum });
+				picks.push({ user: userId, team: best.id, pool_team: order.pool_team, draft_round: draftRound, pick_number: pickNum });
 			}
 
 			// Write all picks in parallel batches of 10
@@ -188,12 +195,6 @@ export const actions: Actions = {
 					.getFullList<DraftOrder>({ filter: `round_group = ${group}`, sort: 'position' });
 			}
 
-			// Map pool_team → user
-			const teamToUser: Record<string, string> = {};
-			for (const req of joinRequests) {
-				if (!teamToUser[req.pool_team]) teamToUser[req.pool_team] = req.user;
-			}
-
 			// Already-drafted team ids (from all existing picks)
 			const draftedIds = new Set(existingPicks.map((p) => p.team));
 
@@ -212,8 +213,7 @@ export const actions: Actions = {
 				const order = ordersToUse.find((o) => o.position === positionIndex + 1);
 				if (!order) continue;
 
-				const userId = teamToUser[order.pool_team];
-				if (!userId) continue;
+				const userId = await resolveUserId(order.pool_team, joinRequests);
 
 				const available = ncaaTeams.filter((t) => !draftedIds.has(t.id));
 				const best = autoPick(available);
