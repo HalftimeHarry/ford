@@ -362,11 +362,56 @@
 	// --- Pick Assignment Panel ---
 	// Shown when draft is live; admin drags NCAA teams onto pool team slots
 	let pickAssignMode = $state(false);
+	let reassignMode = $state(false);
 
 	// ncaaTeamId being dragged in assign mode
 	let assignDragId = $state('');
 	// { poolTeamId, slot } being hovered
 	let assignHoverKey = $state('');
+
+	// Reassign mode state
+	let reassignDragPickId = $state('');   // pick.id being dragged
+	let reassignDragTeamName = $state(''); // display name while dragging
+	let reassignHoverTeamId = $state('');  // pool team being hovered over
+	let reassignPending = $state(false);
+	let reassignError = $state('');
+	let reassignSuccess = $state('');
+
+	function reassignDragStart(e: DragEvent, pickId: string, teamName: string) {
+		reassignDragPickId = pickId;
+		reassignDragTeamName = teamName;
+		e.dataTransfer!.effectAllowed = 'move';
+		e.dataTransfer!.setData('text/plain', pickId);
+	}
+
+	async function reassignDrop(e: DragEvent, toPoolTeamId: string) {
+		e.preventDefault();
+		reassignHoverTeamId = '';
+		const pickId = e.dataTransfer!.getData('text/plain') || reassignDragPickId;
+		reassignDragPickId = '';
+		if (!pickId || !toPoolTeamId) return;
+		reassignPending = true;
+		reassignError = '';
+		reassignSuccess = '';
+		try {
+			const fd = new FormData();
+			fd.set('pick_id', pickId);
+			fd.set('to_pool_team', toPoolTeamId);
+			const res = await fetch('?/reassignPick', { method: 'POST', body: fd, headers: { 'x-sveltekit-action': 'true' } });
+			const json = await res.json();
+			if (json?.type === 'failure' || json?.type === 'error') {
+				reassignError = 'Reassign failed';
+			} else {
+				reassignSuccess = reassignDragTeamName;
+				await invalidateAll();
+			}
+		} catch {
+			reassignError = 'Network error';
+		} finally {
+			reassignPending = false;
+			reassignDragTeamName = '';
+		}
+	}
 
 	function assignDragStart(e: DragEvent, ncaaTeamId: string) {
 		assignDragId = ncaaTeamId;
@@ -383,12 +428,9 @@
 		assignHoverKey = '';
 	}
 
-	// Returns picks already made for a given pool team (via user→poolTeam mapping)
+	// Returns picks already made for a given pool team
 	function picksForTeam(poolTeamId: string) {
-		const userIds = (data.joinRequests ?? [])
-			.filter((r) => r.pool_team === poolTeamId && r.status === 'approved')
-			.map((r) => r.user);
-		return data.picks.filter((p) => userIds.includes(p.user));
+		return data.picks.filter((p) => p.pool_team === poolTeamId || p.expand?.pool_team?.id === poolTeamId);
 	}
 
 	// Shared pick submission — posts directly to avoid DOM sync issues
@@ -676,8 +718,23 @@
 	<!-- Draft Log -->
 	<Card.Card>
 		<Card.CardHeader class="pb-3">
-			<Card.CardTitle class="flex items-center gap-2">
-				<ChartBar class="h-4 w-4" /> Draft Log ({data.picks.length}/{totalPicks})
+			<Card.CardTitle class="flex items-center justify-between gap-2">
+				<span class="flex items-center gap-2"><ChartBar class="h-4 w-4" /> Draft Log ({data.picks.length}/{totalPicks})</span>
+				{#if data.picks.length > 0}
+					<div class="flex items-center gap-2">
+						{#if reassignMode}
+							<span class="text-xs text-muted-foreground">Drag a pick row onto a different pool team card to reassign it.</span>
+						{/if}
+						<Button
+							variant={reassignMode ? 'default' : 'outline'}
+							size="sm"
+							class="h-7 text-xs"
+							onclick={() => { reassignMode = !reassignMode; pickAssignMode = false; }}
+						>
+							{reassignMode ? '← Done' : 'Reassign Picks →'}
+						</Button>
+					</div>
+				{/if}
 			</Card.CardTitle>
 		</Card.CardHeader>
 		<Card.CardContent>
@@ -687,14 +744,31 @@
 				{@const picksByTeam = (data.poolTeams ?? []).map(pt => ({
 					pt,
 					picks: data.picks.filter(p => p.pool_team === pt.id || p.expand?.pool_team?.id === pt.id).sort((a,b) => a.pick_number - b.pick_number)
-				})).filter(g => g.picks.length > 0)}
+				}))}
+				{#if reassignMode && reassignError}
+					<p class="text-xs text-destructive mb-2">{reassignError}</p>
+				{/if}
+				{#if reassignMode && reassignSuccess}
+					<p class="text-xs text-accent mb-2">✅ {reassignSuccess} reassigned.</p>
+				{/if}
 				<div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
 					{#each picksByTeam as { pt, picks: teamPicks }}
-						<div class="rounded-lg border border-border bg-card shadow-sm flex flex-col">
+						<!-- svelte-ignore a11y_no_static_element_interactions -->
+						<div
+							class="rounded-lg border shadow-sm flex flex-col transition-colors
+								{reassignMode && reassignHoverTeamId === pt.id ? 'border-primary bg-primary/5' : 'border-border bg-card'}"
+							ondragover={reassignMode ? (e) => { e.preventDefault(); reassignHoverTeamId = pt.id; } : undefined}
+							ondragleave={reassignMode ? () => { if (reassignHoverTeamId === pt.id) reassignHoverTeamId = ''; } : undefined}
+							ondrop={reassignMode ? (e) => reassignDrop(e, pt.id) : undefined}
+						>
 							<!-- Pool team header -->
-							<div class="px-3 py-2 border-b border-border bg-muted/40 rounded-t-lg">
+							<div class="px-3 py-2 border-b border-border rounded-t-lg
+								{reassignMode && reassignHoverTeamId === pt.id ? 'bg-primary/20' : 'bg-muted/40'}">
 								<p class="text-xs font-semibold truncate">{pt.name}</p>
-								<p class="text-xs text-muted-foreground">{teamPicks.length} pick{teamPicks.length !== 1 ? 's' : ''}</p>
+								<p class="text-xs text-muted-foreground">
+									{teamPicks.length} pick{teamPicks.length !== 1 ? 's' : ''}
+									{#if reassignMode}<span class="text-primary/60"> · drop here to reassign</span>{/if}
+								</p>
 							</div>
 							<!-- Pick rows -->
 							<div class="flex flex-col divide-y divide-border">
@@ -703,19 +777,28 @@
 									{@const roundGroup = Math.ceil((pick.draft_round ?? 1) / 2)}
 									{@const regionColor = team?.region === 'East' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300' : team?.region === 'West' ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300' : team?.region === 'South' ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300' : 'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300'}
 									{@const groupColor = roundGroup === 1 ? 'bg-blue-500/15 text-blue-400' : roundGroup === 2 ? 'bg-purple-500/15 text-purple-400' : 'bg-orange-500/15 text-orange-400'}
-									<div class="px-3 py-1.5 flex items-center gap-2">
-										<!-- Seed -->
+									<!-- svelte-ignore a11y_no_static_element_interactions -->
+									<div
+										class="px-3 py-1.5 flex items-center gap-2
+											{reassignMode ? 'cursor-grab active:cursor-grabbing hover:bg-primary/5' : ''}
+											{reassignMode && reassignDragPickId === pick.id ? 'opacity-40' : ''}"
+										draggable={reassignMode ? 'true' : 'false'}
+										ondragstart={reassignMode ? (e) => reassignDragStart(e, pick.id, team?.name ?? '?') : undefined}
+										ondragend={reassignMode ? () => { reassignDragPickId = ''; reassignHoverTeamId = ''; } : undefined}
+									>
+										{#if reassignMode}
+											<span class="shrink-0 text-muted-foreground/30 text-xs">⠿</span>
+										{/if}
 										<span class="w-5 shrink-0 text-right text-xs font-bold tabular-nums text-muted-foreground/60">#{team?.seed ?? '?'}</span>
-										<!-- Team name -->
 										<span class="flex-1 text-xs font-medium truncate">{team?.name ?? '?'}</span>
-										<!-- Region + group badges -->
 										<span class="shrink-0 rounded px-1 py-0.5 text-xs leading-none {regionColor}">{team?.region?.slice(0,1) ?? '?'}</span>
 										<span class="shrink-0 rounded px-1 py-0.5 text-xs font-bold leading-none {groupColor}">G{roundGroup}</span>
-										<!-- Undo -->
+										{#if !reassignMode}
 										<form method="POST" action="?/undoPick" use:enhance class="shrink-0">
 											<input type="hidden" name="pick_id" value={pick.id} />
 											<button type="submit" class="text-xs text-destructive/30 hover:text-destructive transition-colors">✕</button>
 										</form>
+										{/if}
 									</div>
 								{/each}
 							</div>
@@ -728,13 +811,14 @@
 
 	<!-- Toggle between live draft view and pick assignment view -->
 	{#if isLive && !draftComplete}
-		<div class="flex items-center gap-3">
+		<div class="flex items-center gap-2 flex-wrap">
 			<Button
 				variant={pickAssignMode ? 'default' : 'outline'}
 				size="sm"
-				onclick={() => (pickAssignMode = !pickAssignMode)}
+				class="h-7 text-xs"
+				onclick={() => { pickAssignMode = !pickAssignMode; reassignMode = false; }}
 			>
-				{pickAssignMode ? '← Back to Draft Board' : 'Assign Picks →'}
+				{pickAssignMode ? '← Back' : 'Assign Picks →'}
 			</Button>
 			{#if pickAssignMode}
 				<span class="text-xs text-muted-foreground">Drag an NCAA team onto a pool team's open slot to record the pick.</span>

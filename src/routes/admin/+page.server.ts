@@ -290,6 +290,25 @@ export const actions: Actions = {
 		}
 	},
 
+	reassignPick: async ({ request }) => {
+		await ensureAdminAuth();
+		const fd = await request.formData();
+		const pickId = fd.get('pick_id') as string;
+		const toPoolTeamId = fd.get('to_pool_team') as string;
+		if (!pickId || !toPoolTeamId) return fail(400, { reassignError: 'Missing fields' });
+		try {
+			const userId = await resolveUserId(toPoolTeamId);
+			await adminPb.collection('draft_picks').update(pickId, {
+				pool_team: toPoolTeamId,
+				user: userId
+			});
+			return { reassignSuccess: true };
+		} catch (err: unknown) {
+			const pb_err = err as { response?: { message?: string }; message?: string };
+			return fail(500, { reassignError: pb_err?.response?.message ?? pb_err?.message ?? 'Failed to reassign' });
+		}
+	},
+
 	undoPick: async ({ request }) => {
 		await ensureAdminAuth();
 		const formData = await request.formData();
