@@ -1,5 +1,5 @@
 import { fail } from '@sveltejs/kit';
-import { adminPb, ensureAdminAuth, buildLeaderboard } from '$lib/pocketbase';
+import { adminPb, ensureAdminAuth } from '$lib/pocketbase';
 import { gameResultSchema, isTeamAlive } from '$lib/types';
 import type { Actions, PageServerLoad } from './$types';
 import type { NcaaTeam, GameResult } from '$lib/types';
@@ -7,14 +7,13 @@ import type { NcaaTeam, GameResult } from '$lib/types';
 export const load: PageServerLoad = async () => {
 	await ensureAdminAuth();
 	try {
-		const [teams, results, leaderboard] = await Promise.all([
+		const [teams, results] = await Promise.all([
 			adminPb.collection('ncaa_teams').getFullList<NcaaTeam>({ sort: 'region,seed' }),
-			adminPb.collection('game_results').getFullList<GameResult>({ expand: 'team' }),
-			buildLeaderboard()
+			adminPb.collection('game_results').getFullList<GameResult>({ expand: 'team' })
 		]);
-		return { teams, results, leaderboard };
+		return { teams, results };
 	} catch {
-		return { teams: [], results: [], leaderboard: [] };
+		return { teams: [], results: [] };
 	}
 };
 
