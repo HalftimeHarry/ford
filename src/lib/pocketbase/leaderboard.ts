@@ -1,6 +1,6 @@
 import { adminPb, ensureAdminAuth } from './client';
 import { calculateTeamPoints } from '$lib/types';
-import type { NcaaTeam, DraftPick, GameResult, PoolTeam, JoinRequest } from '$lib/types';
+import type { NcaaTeam, DraftPick, GameResult, PoolTeam } from '$lib/types';
 
 export interface LeaderboardEntry {
 	poolTeam: PoolTeam;
@@ -10,27 +10,19 @@ export interface LeaderboardEntry {
 
 /**
  * Builds the scored leaderboard from game_results + draft_picks, grouped by pool_team.
- * Returns entries sorted by total descending.
- * Safe to call before the draft — returns empty array if no picks exist.
+ * Uses pick.pool_team directly — does not rely on join_requests.
  */
 export async function buildLeaderboard(): Promise<LeaderboardEntry[]> {
 	await ensureAdminAuth();
 
-	const [picks, results, poolTeams, joinRequests] = await Promise.all([
+	const [picks, results, poolTeams] = await Promise.all([
 		adminPb.collection('draft_picks').getFullList<DraftPick>({
 			sort: 'pick_number',
-			expand: 'user,team'
+			expand: 'team'
 		}),
 		adminPb.collection('game_results').getFullList<GameResult>({ expand: 'team' }),
-		adminPb.collection('pool_teams').getFullList<PoolTeam>({ sort: 'name' }),
-		adminPb.collection('join_requests').getFullList<JoinRequest>({ filter: "status = 'approved'" })
+		adminPb.collection('pool_teams').getFullList<PoolTeam>({ sort: 'name' })
 	]);
-
-	// Map user id -> pool_team id from approved join requests
-	const userToPoolTeam: Record<string, string> = {};
-	for (const req of joinRequests) {
-		userToPoolTeam[req.user] = req.pool_team;
-	}
 
 	const scores: Record<string, LeaderboardEntry> = {};
 	for (const pt of poolTeams) {
@@ -43,7 +35,8 @@ export async function buildLeaderboard(): Promise<LeaderboardEntry[]> {
 		if (!ncaaTeam) continue;
 		const pick = picks.find((pk) => pk.team === ncaaTeam.id);
 		if (!pick) continue;
-		const poolTeamId = userToPoolTeam[pick.user];
+		// Use pool_team field directly — join_requests not needed
+		const poolTeamId = pick.pool_team as string;
 		if (!poolTeamId || !scores[poolTeamId]) continue;
 		const points = calculateTeamPoints(ncaaTeam.seed, result.tournament_round);
 		scores[poolTeamId].total += points;
