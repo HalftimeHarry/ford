@@ -1,5 +1,5 @@
 {
-  "snapshotAt": "2026-03-17T18:31:09.350Z",
+  "snapshotAt": "2026-03-21T07:23:52.865Z",
   "pool_teams": [
     {
       "collectionId": "pbc_2152491242",
@@ -912,7 +912,7 @@
       "id": "msd3rlbja75klgp",
       "pick_number": 57,
       "pool_team": "3mqopegilo4kyes",
-      "team": "s366ogcsgmqnwq4",
+      "team": "51lu6ulcw20ppzj",
       "user": "nk7q0xd859ztdn3"
     },
     {
@@ -932,7 +932,7 @@
       "id": "shgqkr73ye6efpa",
       "pick_number": 60,
       "pool_team": "8lbsjocexixpq4p",
-      "team": "uh9ctrfznn0dume",
+      "team": "u0lx64n4fdfd74r",
       "user": "nk7q0xd859ztdn3"
     },
     {
@@ -940,9 +940,29 @@
       "collectionName": "draft_picks",
       "draft_round": 6,
       "id": "n361ajpphjqrwa2",
-      "pick_number": 60,
+      "pick_number": 59,
       "pool_team": "874jxqqzavwx2pw",
       "team": "0h78b1zgkk1c44l",
+      "user": "nk7q0xd859ztdn3"
+    },
+    {
+      "collectionId": "pbc_2345463699",
+      "collectionName": "draft_picks",
+      "draft_round": 6,
+      "id": "7epgh82ltlfrxga",
+      "pick_number": 61,
+      "pool_team": "8lbsjocexixpq4p",
+      "team": "8ag7891l2fd77ay",
+      "user": "nk7q0xd859ztdn3"
+    },
+    {
+      "collectionId": "pbc_2345463699",
+      "collectionName": "draft_picks",
+      "draft_round": 6,
+      "id": "4uyjhldgzpxrv6n",
+      "pick_number": 62,
+      "pool_team": "3mqopegilo4kyes",
+      "team": "33ezwf6odip56li",
       "user": "nk7q0xd859ztdn3"
     }
   ],
@@ -1465,18 +1485,9 @@
       "collectionName": "ncaa_teams",
       "eliminated_round": "",
       "id": "0h78b1zgkk1c44l",
-      "name": "Howard",
+      "name": "Howard Bison",
       "region": "Midwest",
       "seed": 16
-    },
-    {
-      "collectionId": "pbc_725768535",
-      "collectionName": "ncaa_teams",
-      "eliminated_round": "",
-      "id": "s366ogcsgmqnwq4",
-      "name": "Texas",
-      "region": "First Four 2",
-      "seed": 11
     },
     {
       "collectionId": "pbc_725768535",
@@ -1492,7 +1503,7 @@
       "collectionName": "ncaa_teams",
       "eliminated_round": "",
       "id": "uwx4kvgd5pfyyjk",
-      "name": "Prairie View / Lehigh",
+      "name": "SIUE Cougars",
       "region": "South",
       "seed": 16
     },
@@ -1501,7 +1512,7 @@
       "collectionName": "ncaa_teams",
       "eliminated_round": "",
       "id": "9dlsrb4vosoqgi6",
-      "name": "LIU Sharks",
+      "name": "Montana State Bobcats",
       "region": "West",
       "seed": 16
     },
@@ -1509,8 +1520,35 @@
       "collectionId": "pbc_725768535",
       "collectionName": "ncaa_teams",
       "eliminated_round": "",
-      "id": "uh9ctrfznn0dume",
-      "name": "SMU",
+      "id": "0cap4362xbcv270",
+      "name": "American Eagles",
+      "region": "East",
+      "seed": 16
+    },
+    {
+      "collectionId": "pbc_725768535",
+      "collectionName": "ncaa_teams",
+      "eliminated_round": "",
+      "id": "u0lx64n4fdfd74r",
+      "name": "Furman Paladins",
+      "region": "East",
+      "seed": 15
+    },
+    {
+      "collectionId": "pbc_725768535",
+      "collectionName": "ncaa_teams",
+      "eliminated_round": "",
+      "id": "51lu6ulcw20ppzj",
+      "name": "Tennessee State Tigers",
+      "region": "Midwest",
+      "seed": 15
+    },
+    {
+      "collectionId": "pbc_725768535",
+      "collectionName": "ncaa_teams",
+      "eliminated_round": "",
+      "id": "8ag7891l2fd77ay",
+      "name": "SMU Mustangs",
       "region": "First Four",
       "seed": 11
     },
@@ -1518,10 +1556,10 @@
       "collectionId": "pbc_725768535",
       "collectionName": "ncaa_teams",
       "eliminated_round": "",
-      "id": "0cap4362xbcv270",
-      "name": "Siena Saints",
-      "region": "East",
-      "seed": 16
+      "id": "33ezwf6odip56li",
+      "name": "Texas Longhorns",
+      "region": "First Four 2",
+      "seed": 11
     }
   ]
 }

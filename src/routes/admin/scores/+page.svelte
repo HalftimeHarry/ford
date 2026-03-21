@@ -5,13 +5,11 @@
 	import * as Card from '$lib/components/ui/card';
 	import { Separator } from '$lib/components/ui/separator';
 	import { TOURNAMENT_ROUNDS, REGIONS, isTeamAlive } from '$lib/types';
-	import Trophy from '@lucide/svelte/icons/trophy';
 	import ChartBar from '@lucide/svelte/icons/bar-chart';
 	import CircleCheck from '@lucide/svelte/icons/circle-check';
 	import CircleX from '@lucide/svelte/icons/circle-x';
 	import Trash from '@lucide/svelte/icons/trash';
 	import ArrowLeftRight from '@lucide/svelte/icons/arrow-left-right';
-	import LeaderboardComponent from '$lib/components/Leaderboard.svelte';
 
 	let { data, form } = $props();
 
@@ -25,8 +23,9 @@
 	};
 
 	const roundOrder = TOURNAMENT_ROUNDS;
+	// round_1 includes 2 First Four games (2 extra losers) + 32 main bracket = 34
 	const requiredLosers: Record<string, number> = {
-		round_1: 32, round_2: 16, round_3: 8, round_4: 4, semifinal: 2, final: 1
+		round_1: 34, round_2: 16, round_3: 8, round_4: 4, semifinal: 2, final: 1
 	};
 
 	// ── Record tab ────────────────────────────────────────────────────────────
@@ -35,9 +34,21 @@
 	// Track which rounds are locally known to be complete (survives invalidateAll)
 	let completedRounds = $state<Set<string>>(new Set());
 
-	let activeTeams = $derived(data.teams.filter((t) => isTeamAlive(t)));
+	const MAIN_REGIONS = new Set(['East', 'West', 'South', 'Midwest', 'First Four', 'First Four 2']);
+	const ALL_REGIONS = ['East', 'West', 'South', 'Midwest', 'First Four', 'First Four 2'] as const;
+	let activeTeams = $derived(data.teams.filter((t) => isTeamAlive(t) && MAIN_REGIONS.has(t.region)));
 	let roundResultTeamIds = $derived(new Set(data.results.filter((r) => r.tournament_round === selectedRound).map((r) => r.team)));
+	// Eligible = alive teams not yet recorded for this round (used for submit count/validation)
 	let eligibleTeams = $derived(activeTeams.filter((t) => !roundResultTeamIds.has(t.id)));
+
+	// Rounds in order — teams eliminated in a round BEFORE selectedRound were not in this round
+	const roundIndex = $derived(TOURNAMENT_ROUNDS.indexOf(selectedRound));
+	const priorRounds = $derived(new Set(TOURNAMENT_ROUNDS.slice(0, roundIndex)));
+
+	// Display: all teams that played in selectedRound = main-region teams NOT eliminated before this round
+	let allRoundTeams = $derived(data.teams.filter((t) =>
+		MAIN_REGIONS.has(t.region) && !priorRounds.has(t.eliminated_round as string)
+	));
 
 	function isRoundComplete(round: string): boolean {
 		return completedRounds.has(round) ||
@@ -298,10 +309,9 @@
 		<ChartBar class="h-7 w-7" /> Tournament Scoring
 	</h1>
 
-	<div class="grid gap-6 xl:grid-cols-[1fr_380px]">
+	<div class="space-y-6">
 
-		<!-- Left -->
-		<div class="space-y-6">
+
 			<Card.Card class="border-primary/30">
 				<Card.CardHeader class="pb-3">
 					<div class="flex gap-1 rounded-lg bg-muted p-1 w-fit">
@@ -389,14 +399,14 @@
 							{/each}
 						</div>
 
-						{#if eligibleTeams.length === 0}
+						{#if allRoundTeams.length === 0}
 							<p class="text-sm text-accent text-center py-3 flex items-center justify-center gap-1.5">
 								<CircleCheck class="h-4 w-4" /> All results recorded. Use Corrections tab to fix any mistakes.
 							</p>
 						{:else}
 							<div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-								{#each REGIONS as region}
-									{@const regionTeams = eligibleTeams.filter((t) => t.region === region)}
+								{#each ALL_REGIONS as region}
+									{@const regionTeams = allRoundTeams.filter((t) => t.region === region)}
 									{#if regionTeams.length > 0}
 										<div class="space-y-1">
 											<div class="flex items-center justify-between mb-2">
@@ -408,16 +418,35 @@
 											</div>
 											{#each regionTeams as team}
 												{@const isLoser = selectedLosers.has(team.id)}
-												<button type="button" onclick={() => toggleLoser(team.id)}
+												{@const alreadyRecorded = roundResultTeamIds.has(team.id)}
+												{@const recordedResult = data.results.find(r => r.team === team.id && r.tournament_round === selectedRound)}
+												<button type="button"
+													onclick={() => !alreadyRecorded && toggleLoser(team.id)}
+													disabled={alreadyRecorded}
 													class="flex w-full items-center gap-2 rounded px-2 py-1 text-xs transition-colors
-														{isLoser ? 'bg-destructive/20 text-destructive ring-1 ring-destructive/40' : 'bg-muted/50 hover:bg-muted'}">
-													{#if isLoser}
+														{alreadyRecorded
+															? recordedResult?.won
+																? 'bg-accent/10 text-accent/70 cursor-default opacity-60'
+																: 'bg-destructive/10 text-destructive/70 cursor-default opacity-60'
+															: isLoser
+																? 'bg-destructive/20 text-destructive ring-1 ring-destructive/40'
+																: 'bg-muted/50 hover:bg-muted'}">
+													{#if alreadyRecorded}
+														{#if recordedResult?.won}
+															<CircleCheck class="h-3 w-3 shrink-0 text-accent/60" />
+														{:else}
+															<CircleX class="h-3 w-3 shrink-0 text-destructive/60" />
+														{/if}
+													{:else if isLoser}
 														<CircleX class="h-3 w-3 shrink-0 text-destructive" />
 													{:else}
 														<CircleCheck class="h-3 w-3 shrink-0 text-muted-foreground/40" />
 													{/if}
 													<span class="w-4 text-right font-mono text-muted-foreground shrink-0">{team.seed}</span>
 													<span class="flex-1 truncate text-left font-medium">{team.name}</span>
+													{#if alreadyRecorded}
+														<span class="shrink-0 text-xs font-bold opacity-50">{recordedResult?.won ? 'W' : 'L'}</span>
+													{/if}
 												</button>
 											{/each}
 										</div>
@@ -492,24 +521,5 @@
 					{/if}
 				</Card.CardContent>
 			</Card.Card>
-		</div>
-
-		<!-- Right: Leaderboard -->
-		<div>
-			<Card.Card>
-				<Card.CardHeader class="pb-2">
-					<div class="flex items-center justify-between">
-						<Card.CardTitle class="flex items-center gap-2">
-							<Trophy class="h-4 w-4" /> Leaderboard
-						</Card.CardTitle>
-						<a href="/leaderboard" target="_blank" class="text-xs text-muted-foreground hover:text-primary underline">Public view ↗</a>
-					</div>
-				</Card.CardHeader>
-				<Card.CardContent>
-					<LeaderboardComponent entries={data.leaderboard} showBreakdown={true} />
-				</Card.CardContent>
-			</Card.Card>
-		</div>
-
 	</div>
 </div>
